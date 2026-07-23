@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Task = { id: number; title: string; estimate: number; done: boolean };
 type CheckState = "idle" | "checking" | "ok" | "warn";
+type UserProfile = {
+  name: string;
+  role: string;
+  dailyGoalSessions: number;
+  onboardingComplete: boolean;
+};
 type VisibleSections = {
   overview: boolean;
   tasks: boolean;
@@ -37,6 +43,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
 };
 
+const DEFAULT_PROFILE: UserProfile = {
+  name: "",
+  role: "",
+  dailyGoalSessions: 4,
+  onboardingComplete: false,
+};
+
 const INITIAL_TASKS: Task[] = [
   { id: 1, title: "提案書の構成を仕上げる", estimate: 2, done: false },
   { id: 2, title: "ユーザー調査メモを整理", estimate: 1, done: true },
@@ -59,6 +72,10 @@ function formatTime(seconds: number) {
   return `${mins}:${secs}`;
 }
 
+function getInitial(name: string) {
+  return name.trim().slice(0, 1) || "F";
+}
+
 function Icon({ name }: { name: string }) {
   const icons: Record<string, string> = {
     home: "⌂", timer: "◷", chart: "▥", meeting: "◉", settings: "⚙",
@@ -69,6 +86,7 @@ function Icon({ name }: { name: string }) {
 }
 
 export function FocusDashboard() {
+  const [hydrated, setHydrated] = useState(false);
   const [seconds, setSeconds] = useState(25 * 60);
   const [duration, setDuration] = useState(25);
   const [running, setRunning] = useState(false);
@@ -83,7 +101,9 @@ export function FocusDashboard() {
   const [breakDone, setBreakDone] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [toast, setToast] = useState("");
   const lastActivity = useRef(Date.now() - 47 * 60 * 1000);
 
@@ -94,6 +114,9 @@ export function FocusDashboard() {
         const data = JSON.parse(saved);
         if (Array.isArray(data.tasks)) setTasks(data.tasks);
         if (typeof data.sessions === "number") setSessions(data.sessions);
+        const restoredProfile = { ...DEFAULT_PROFILE, ...data.profile };
+        setProfile(restoredProfile);
+        setOnboardingOpen(!restoredProfile.onboardingComplete);
         if (data.settings) {
           const restored = {
             ...DEFAULT_SETTINGS,
@@ -105,13 +128,17 @@ export function FocusDashboard() {
           setDuration(restored.focusMinutes);
           setSeconds(restored.focusMinutes * 60);
         }
+      } else {
+        setOnboardingOpen(true);
       }
     } catch { /* device storage can be unavailable in private mode */ }
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem("focusflow-state", JSON.stringify({ tasks, sessions, settings })); } catch { /* noop */ }
-  }, [tasks, sessions, settings]);
+    if (!hydrated) return;
+    try { localStorage.setItem("focusflow-state", JSON.stringify({ tasks, sessions, settings, profile })); } catch { /* noop */ }
+  }, [hydrated, tasks, sessions, settings, profile]);
 
   useEffect(() => {
     if (!running) return;
@@ -182,6 +209,7 @@ export function FocusDashboard() {
 
   const progress = 1 - seconds / (duration * 60);
   const completed = tasks.filter((task) => task.done).length;
+  const displayName = profile.name.trim() || "あなた";
 
   const toggleTask = (id: number) => {
     setTasks((items) => items.map((task) => task.id === id ? { ...task, done: !task.done } : task));
@@ -216,15 +244,15 @@ export function FocusDashboard() {
           <button className="nav-item" onClick={() => setMeetingOpen(true)}><Icon name="meeting" /><span>会議チェック</span></button>
         </nav>
         <div className="sidebar-bottom">
-          <div className="mini-streak"><span>今週のリズム</span><strong>4日連続</strong><small>あと1日で自己ベスト</small></div>
+          <div className="mini-streak"><span>今週のリズム</span><strong>4日連続</strong><small>目標 {profile.dailyGoalSessions} ポモドーロ/日</small></div>
           <button className="nav-item" onClick={() => setSettingsOpen(true)}><Icon name="settings" /><span>設定</span></button>
-          <div className="profile"><span className="avatar">悠</span><span><strong>山田 悠</strong><small>同期済み</small></span><span className="online" /></div>
+          <div className="profile"><span className="avatar">{getInitial(displayName)}</span><span><strong>{displayName}</strong><small>{profile.role || "ローカル保存"}</small></span><span className="online" /></div>
         </div>
       </aside>
 
       <main id="top" className="main-content">
         <header className="topbar">
-          <div><p className="eyebrow">7月23日 木曜日</p><h1>おはようございます、悠さん</h1><p>今日も、いいリズムをつくりましょう。</p></div>
+          <div><p className="eyebrow">7月23日 木曜日</p><h1>おはようございます、{displayName}さん</h1><p>今日も、いいリズムをつくりましょう。</p></div>
           <div className="top-actions">
             <button className={`quiet-pill ${quiet ? "on" : ""}`} onClick={() => setQuiet(!quiet)} aria-pressed={quiet}>
               <span className="status-dot" /><span><b>通知抑制</b><small>{quiet ? "集中時に自動ON" : "オフ"}</small></span><span className="switch" />
@@ -310,8 +338,12 @@ export function FocusDashboard() {
         <a className="active" href="#top"><Icon name="home" /><span>今日</span></a><a href="#timer"><Icon name="timer" /><span>集中</span></a><button onClick={() => setMeetingOpen(true)}><Icon name="meeting" /><span>会議</span></button><a href="#insights"><Icon name="chart" /><span>記録</span></a><button onClick={() => setSettingsOpen(true)}><Icon name="settings" /><span>設定</span></button>
       </nav>
       {meetingOpen && <MeetingChecker onClose={() => setMeetingOpen(false)} />}
-      {settingsOpen && <SettingsModal settings={settings} tasks={tasks} sessions={sessions} onChange={setSettings} onClose={() => setSettingsOpen(false)} onReset={() => {
-        setTasks(INITIAL_TASKS); setSessions(0); setSettings(DEFAULT_SETTINGS); setQuiet(DEFAULT_SETTINGS.autoQuiet);
+      {onboardingOpen && <OnboardingModal profile={profile} settings={settings} onComplete={(nextProfile, nextSettings) => {
+        setProfile(nextProfile); setSettings(nextSettings); setQuiet(nextSettings.autoQuiet);
+        setTimerDuration(nextSettings.focusMinutes, "focus"); setOnboardingOpen(false); setToast("初期設定を保存しました");
+      }} />}
+      {settingsOpen && <SettingsModal settings={settings} profile={profile} tasks={tasks} sessions={sessions} onChange={setSettings} onProfileChange={setProfile} onClose={() => setSettingsOpen(false)} onReset={() => {
+        setTasks(INITIAL_TASKS); setSessions(0); setSettings(DEFAULT_SETTINGS); setProfile(DEFAULT_PROFILE); setQuiet(DEFAULT_SETTINGS.autoQuiet); setOnboardingOpen(true);
         setTimerDuration(DEFAULT_SETTINGS.focusMinutes, "focus"); setToast("設定とローカルデータを初期化しました");
       }} />}
       {toast && <div className="toast" role="status"><Icon name="check" />{toast}</div>}
@@ -319,13 +351,79 @@ export function FocusDashboard() {
   );
 }
 
+function OnboardingModal({
+  profile, settings, onComplete,
+}: {
+  profile: UserProfile;
+  settings: AppSettings;
+  onComplete: (profile: UserProfile, settings: AppSettings) => void;
+}) {
+  const [name, setName] = useState(profile.name);
+  const [role, setRole] = useState(profile.role);
+  const [dailyGoalSessions, setDailyGoalSessions] = useState(profile.dailyGoalSessions);
+  const [focusMinutes, setFocusMinutes] = useState(settings.focusMinutes);
+  const [breakMinutes, setBreakMinutes] = useState(settings.breakMinutes);
+  const [nameTouched, setNameTouched] = useState(false);
+  const trimmedName = name.trim();
+  const guideItems = [
+    { title: "1. タスクを選ぶ", detail: "今日やることを追加して、集中するタスクを1つ決めます。" },
+    { title: "2. タイマーを回す", detail: "集中と休憩を切り替えながら、作業ログを端末に残します。" },
+    { title: "3. 必要な項目だけ見る", detail: "設定からグラフ、会議チェック、通知抑制などを表示切替できます。" },
+  ];
+  const complete = () => {
+    setNameTouched(true);
+    if (!trimmedName) return;
+    onComplete(
+      { name: trimmedName, role: role.trim(), dailyGoalSessions, onboardingComplete: true },
+      { ...settings, focusMinutes, breakMinutes },
+    );
+  };
+
+  return (
+    <div className="modal-backdrop onboarding-backdrop" role="presentation">
+      <div className="modal onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <div className="onboarding-hero">
+          <span className="brand-mark"><Icon name="spark" /></span>
+          <span className="section-kicker">WELCOME TO FOCUSFLOW</span>
+          <h2 id="onboarding-title">最初に、あなた用の作業環境を整えます</h2>
+          <p>この設定は端末内だけに保存されます。あとから設定画面でいつでも変更できます。</p>
+        </div>
+
+        <div className="guide-grid">
+          {guideItems.map((item) => (
+            <div className="guide-card" key={item.title}>
+              <strong>{item.title}</strong>
+              <small>{item.detail}</small>
+            </div>
+          ))}
+        </div>
+
+        <div className="setup-form">
+          <label className="text-setting"><span><strong>表示名</strong><small>挨拶やプロフィールに表示します</small></span><input value={name} onBlur={() => setNameTouched(true)} onChange={(event) => setName(event.target.value)} placeholder="例: 佐藤 悠" autoFocus /></label>
+          {nameTouched && !trimmedName && <p className="form-error">表示名を入力してください</p>}
+          <label className="text-setting"><span><strong>作業タイプ</strong><small>例: 開発、デザイン、学習、事務作業</small></span><input value={role} onChange={(event) => setRole(event.target.value)} placeholder="例: Web開発" /></label>
+          <div className="settings-form-grid compact">
+            <label className="select-setting"><span><strong>集中時間</strong><small>1回の作業時間</small></span><select value={focusMinutes} onChange={(event) => setFocusMinutes(Number(event.target.value))}>{[15, 25, 45, 60, 90].map(value => <option value={value} key={value}>{value}分</option>)}</select></label>
+            <label className="select-setting"><span><strong>休憩時間</strong><small>集中後の休憩</small></span><select value={breakMinutes} onChange={(event) => setBreakMinutes(Number(event.target.value))}>{[3, 5, 10, 15].map(value => <option value={value} key={value}>{value}分</option>)}</select></label>
+            <label className="select-setting"><span><strong>1日の目標</strong><small>ポモドーロ数</small></span><select value={dailyGoalSessions} onChange={(event) => setDailyGoalSessions(Number(event.target.value))}>{[2, 3, 4, 6, 8].map(value => <option value={value} key={value}>{value}回</option>)}</select></label>
+          </div>
+        </div>
+
+        <button className="button dark full onboarding-start" onClick={complete}>FocusFlowを始める</button>
+      </div>
+    </div>
+  );
+}
+
 function SettingsModal({
-  settings, tasks, sessions, onChange, onClose, onReset,
+  settings, profile, tasks, sessions, onChange, onProfileChange, onClose, onReset,
 }: {
   settings: AppSettings;
+  profile: UserProfile;
   tasks: Task[];
   sessions: number;
   onChange: (settings: AppSettings) => void;
+  onProfileChange: (profile: UserProfile) => void;
   onClose: () => void;
   onReset: () => void;
 }) {
@@ -336,7 +434,7 @@ function SettingsModal({
     onChange({ ...settings, visible: { ...settings.visible, [key]: value } });
   };
   const exportData = () => {
-    const payload = { app: "FocusFlow", exportedAt: new Date().toISOString(), tasks, sessions, settings };
+    const payload = { app: "FocusFlow", exportedAt: new Date().toISOString(), tasks, sessions, settings, profile };
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
     const anchor = document.createElement("a");
     anchor.href = url; anchor.download = `focusflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -366,6 +464,15 @@ function SettingsModal({
         </div>
 
         <div className="settings-scroll">
+          <section className="settings-section">
+            <div className="settings-section-title"><span className="settings-section-icon"><Icon name="home" /></span><span><strong>プロフィール</strong><small>初回設定で入力した情報を変更できます</small></span></div>
+            <div className="profile-settings-grid">
+              <label className="text-setting"><span><strong>表示名</strong><small>挨拶とサイドバーに表示</small></span><input value={profile.name} onChange={(event) => onProfileChange({ ...profile, name: event.target.value })} placeholder="表示名" /></label>
+              <label className="text-setting"><span><strong>作業タイプ</strong><small>プロフィールの補足ラベル</small></span><input value={profile.role} onChange={(event) => onProfileChange({ ...profile, role: event.target.value })} placeholder="例: Web開発" /></label>
+              <label className="select-setting"><span><strong>1日の目標</strong><small>目標ポモドーロ数</small></span><select value={profile.dailyGoalSessions} onChange={(event) => onProfileChange({ ...profile, dailyGoalSessions: Number(event.target.value) })}>{[2, 3, 4, 6, 8].map(value => <option value={value} key={value}>{value}回</option>)}</select></label>
+            </div>
+          </section>
+
           <section className="settings-section">
             <div className="settings-section-title"><span className="settings-section-icon"><Icon name="chart" /></span><span><strong>ホームに表示する項目</strong><small>不要なカードを隠して画面を整理できます</small></span></div>
             <div className="visibility-grid">

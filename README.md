@@ -4,7 +4,7 @@
 
 ポモドーロタイマー、作業記録、休憩リマインダー、通知抑制、会議前のデバイスチェックをひとつにまとめた、PC・iPhone向けの作業管理Webアプリです。
 
-[▶ Live Demo — FocusFlowを試す](https://focusflow-work-manager.fey-skunk-6159.chatgpt.site)
+[▶ Live Demo — FocusFlowを試す](https://focusflow.0404taichi8.workers.dev/)
 
 ![FocusFlow preview](public/og.png)
 
@@ -137,6 +137,8 @@ app/
 
 public/
 ├── manifest.webmanifest # ホーム画面追加設定
+├── offline.html         # オフライン時のフォールバック画面
+├── sw.js                # PWA用Service Worker
 └── og.png               # SNS共有用ビジュアル
 ```
 
