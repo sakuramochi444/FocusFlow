@@ -1,0 +1,10 @@
+{
+  "name": "FocusFlow — 作業管理",
+  "short_name": "FocusFlow",
+  "description": "集中と休息を整える作業管理アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f0",
+  "theme_color": "#17211c",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
