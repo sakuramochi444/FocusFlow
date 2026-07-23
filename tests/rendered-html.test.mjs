@@ -88,5 +88,6 @@ test("defines account database and sync API routes", async () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS `users`/);
   assert.match(packagedMigration, /CREATE TABLE IF NOT EXISTS `users`/);
   assert.match(packageJson, /package-d1-migrations\.mjs/);
+  assert.match(packageJson, /wrangler deploy --config dist\/server\/wrangler\.json/);
   assert.match(packageScript, /dist", "server", "migrations"/);
 });

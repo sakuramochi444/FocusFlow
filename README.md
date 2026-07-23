@@ -125,7 +125,7 @@ npm run build
 1. GitHubへこのプロジェクトをpush
 2. Cloudflare Dashboardの **Workers & Pages** からGitHubリポジトリを接続
 3. Build commandを `npm run build` に設定
-4. Deploy commandを `npm run deploy -- --skip-build` に設定
+4. Deploy commandを `npm run deploy` に設定
 5. Production branchを `main` に設定
 
 以降は`main`へのpushごとに、自動でビルドと公開が行われます。
