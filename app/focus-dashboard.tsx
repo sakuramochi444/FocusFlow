@@ -750,7 +750,8 @@ function AuthModal({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(data.error ?? "認証に失敗しました");
+        const detail = [data.code, data.detail].filter(Boolean).join(" / ");
+        setError(`${data.error ?? "認証に失敗しました"}${detail ? `（${detail}）` : ""}`);
         return;
       }
       onSuccess(data.user);

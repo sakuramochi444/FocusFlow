@@ -242,7 +242,7 @@ footer p { margin: 0; }
 .auth-form label { display: grid; gap: 5px; }
 .auth-form span { color: #69736b; font-size: 8px; font-weight: 730; }
 .auth-form input { width: 100%; border: 1px solid var(--line); border-radius: 10px; outline: 0; background: #f8faf6; padding: 11px 12px; color: var(--ink); font-size: 11px; }
-.auth-error { text-align: left; }
+.auth-error { text-align: left; line-height: 1.55; overflow-wrap: anywhere; }
 .settings-modal { width: min(720px, 100%); max-height: min(820px, calc(100vh - 36px)); padding: 0; text-align: left; overflow: hidden; display: flex; flex-direction: column; }
 .settings-header { flex: 0 0 auto; padding: 27px 30px 20px; border-bottom: 1px solid var(--line); position: relative; }
 .settings-header h2 { margin: 4px 0 4px; font-size: 23px; }.settings-header p { margin: 0; color: #858d86; font-size: 10px; }
