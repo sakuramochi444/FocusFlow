@@ -1,168 +1,197 @@
 # FocusFlow
 
-> 集中と休息を、いいリズムで。
+集中・休憩・記録・会議準備をひとつにまとめた、PC / iPhone向けの作業管理PWAです。
 
-ポモドーロタイマー、作業記録、休憩リマインダー、通知抑制、会議前のデバイスチェックをひとつにまとめた、PC・iPhone向けの作業管理Webアプリです。 
-
-[▶ Live Demo — FocusFlowを試す](https://focusflow.0404taichi8.workers.dev/)
+[Live Demo](https://focusflow.0404taichi8.workers.dev/)
 
 ![FocusFlow preview](public/og.png)
 
-## Overview
+## Concept
 
-集中を支援するツールは、タイマー・タスク管理・実績記録などが別々のアプリに分かれがちです。FocusFlowでは「仕事を選ぶ」「集中する」「休む」「振り返る」「会議へ移る」という一日の流れを、ひとつの画面で完結させました。 
+FocusFlowは、作業を「始める」「続ける」「休む」「振り返る」「会議へ切り替える」までを一つの流れとして扱うプロダクトです。
 
-情報量の多いダッシュボードでありながら、いま必要な操作が自然に目に入ることを重視しています。集中タイマーを画面の中心に置き、タスクやコンディション、次の会議をその周囲に配置しました。
+単なるポモドーロタイマーではなく、タスク、集中セッション、休憩リマインダー、通知の一時保留、会議前チェック、実績グラフをまとめることで、作業中にアプリを行き来する負担を減らすことを目指しました。
 
-## Features
+PCでは広いダッシュボードとして、iPhoneではPWAとしてホーム画面から使えるように設計しています。
 
-### Focus Timer
+## Main Features
 
-- 15・25・45・60分のプリセットに対応
-- 集中／休憩モードの切り替え
-- 一時停止、リセット、5分延長
-- 集中するタスクをセッションごとに選択
-- セッション終了後、自動的に休憩へ移行
-- 完了した集中セッションを端末内に記録
-- 終了予定時刻を保存し、タブ移動やPWA復帰後も残り時間を補正
+- ポモドーロタイマー
+  - 集中 / 休憩モード
+  - 15 / 25 / 45 / 60分プリセット
+  - 一時停止、リセット、5分延長
+  - タブ移動やPWA復帰後も終了予定時刻から残り時間を補正
 
-### Task Management
+- タスク管理
+  - 今日のタスク追加、完了、削除
+  - タスクごとの見積もりポモドーロ数
+  - 集中セッションとタスクの紐づけ
 
-- 今日のタスクを追加・完了
-- タスクごとの予定ポモドーロ数を表示
-- タイマーとタスクを直接連携
-- タスク、プロフィール、集中記録をブラウザへ自動保存
+- 作業記録・実績グラフ
+  - 今日の集中時間
+  - 完了タスク数
+  - 直近7日間の集中時間
+  - 最近の集中セッション履歴
 
-### Smart Break
+- 休憩リマインダー
+  - ページ内の操作状況から連続作業時間を推定
+  - 長時間作業時に休憩を促すカードを表示
 
-- ページ内の操作状況から連続作業時間を推定
-- 適切なタイミングで休憩カードを強調
-- 5分休憩をその場で開始
+- 通知抑制タイマー
+  - 集中中はアプリ内通知をキューに保留
+  - 集中終了後にまとめて確認できる設計
 
-### Notification Digest
+- 会議前チェッカー
+  - マイク確認
+  - カメラ確認
+  - スピーカーテスト
+  - 通信応答チェック
 
-- 集中時間中のアプリ内通知を一時保留
-- 終了後にまとめて確認できる通知キュー
-- 集中開始と通知抑制を連動
+- アカウント認証・同期
+  - メールアドレス / パスワード認証
+  - HTTP-only Cookieによるセッション管理
+  - Cloudflare D1にアカウントごとのタスク、設定、集中履歴を保存
+  - 未ログイン状態ではブラウザのLocalStorageに保存
 
-### Meeting Check
+- PWA対応
+  - ホーム画面追加
+  - Service Worker
+  - オフライン時のフォールバック
+  - PC / iPhoneに合わせたレスポンシブUI
 
-- マイクとカメラのアクセス確認
-- スピーカーのテスト音再生
-- 通信応答速度の確認
-- 各項目を「OK／要確認」で一覧表示
+## Why I Built This
 
-### Insights
+集中系アプリは、タイマーだけ、タスクだけ、記録だけに分かれていることが多く、実際の作業では複数のツールを切り替える必要があります。
 
-- 1週間の集中時間を棒グラフで可視化
-- 今日の集中時間、昨日との差分、完了タスク、集中スコアを表示
-- 最近完了した集中セッションを一覧表示
-- PCではサイドバー、iPhoneでは下部ナビゲーションへ自動変更
-- ホーム画面へ追加できるPWA設定
+FocusFlowでは、作業中に必要になる機能を一つの画面に統合し、「集中を始める前の準備」と「集中した後の振り返り」までを自然につなげることを意識しました。
 
-### Account Sync
+特にこだわったのは、次の3点です。
 
-- メールアドレスとパスワードでアカウントを作成
-- HTTP-only Cookieでログイン状態を保持
-- タスク、プロフィール、設定、集中履歴をアカウントごとにD1へ保存
-- 未ログイン時はこれまで通り端末内保存で利用可能
-- ログイン後、端末内データをアカウントデータとして同期
+1. タイマーがリセットされないこと  
+   タブ移動、画面復帰、設定変更などで集中時間が失われないよう、終了予定時刻を保存して補正しています。
 
-## Design Approach
+2. ローカル保存とアカウント同期の両立  
+   すぐ使えるLocalStorage保存を残しつつ、ログイン後はD1へ同期できる構成にしました。
 
-### 集中状態だけが際立つ配色
+3. Webアプリとして現実的な制約を明示的に扱うこと  
+   ブラウザではOS全体の通知制御やスマホの完全なバックグラウンド実行はできないため、PWA・通知許可・復帰時補正を組み合わせて実用性を高めています。
 
-通常時はオフホワイトとセージグリーンで刺激を抑え、開始ボタンや進捗など「いま行動する場所」にだけライムカラーを使用しました。長時間開いたままでも疲れにくく、集中状態が視覚的に伝わる設計です。
+## Tech Stack
 
-### 一画面で仕事の流れをつなぐ
+| Area | Technology |
+| --- | --- |
+| Language | TypeScript |
+| UI | React 19 |
+| Framework | Next.js 16 / vinext |
+| Build | Vite |
+| Styling | CSS |
+| Auth | Custom email/password auth, HTTP-only Cookie |
+| Database | Cloudflare D1 |
+| ORM / Migration | Drizzle |
+| Hosting | Cloudflare Workers |
+| PWA | Web App Manifest, Service Worker |
 
-タイマーを単独機能として扱わず、タスク選択、通知抑制、休憩、実績記録へ連続する体験として設計しました。機能間の移動を減らし、集中が途切れる要因を抑えています。
+## Architecture
 
-### モバイルでも迷わない操作性
+```text
+Browser / PWA
+  ├─ LocalStorage
+  │   └─ 未ログイン時のタスク・設定・集中履歴
+  │
+  └─ API Routes
+      ├─ /api/auth
+      │   └─ アカウント作成、ログイン、ログアウト
+      │
+      ├─ /api/sync
+      │   └─ ユーザーごとの作業データ同期
+      │
+      └─ /api/diagnostics
+          └─ D1接続状態の確認
 
-タップ領域、カードの表示順、下部ナビゲーション、セーフエリアをiPhone向けに調整しています。画面幅が変わっても重要な機能の優先順位が崩れないレスポンシブ設計です。
+Cloudflare Workers
+  └─ Cloudflare D1
+      ├─ users
+      ├─ auth_sessions
+      └─ user_app_states
+```
 
-## Technical Highlights
+## Browser and PWA Constraints
 
-- **TypeScript / React 19** — 状態管理とインタラクション
-- **Next.js 16 / vinext / Vite** — アプリケーション構成とビルド
-- **CSS** — レスポンシブレイアウト、モーション、タイマー表現
-- **LocalStorage** — タスク、設定、集中セッション履歴の端末内保存
-- **Cloudflare D1** — アカウント、セッション、ユーザーごとの作業データ保存
-- **HTTP-only Cookie Auth** — アカウントごとの同期
-- **MediaDevices API** — マイク・カメラの会議前確認
-- **Web Audio API** — スピーカーのテスト音
-- **Web App Manifest / Service Worker** — iPhone・PCのホーム画面追加、オフライン表示、通知クリック復帰に対応
-- **Cloudflare Workers compatible output** — エッジ環境へデプロイ
+このアプリはWebブラウザ上で動作するため、OSネイティブアプリと同じことがすべてできるわけではありません。
 
-グラフやタイマー表示は外部UIライブラリに依存せず、ReactとCSSで実装しています。
+- スマートフォンでは、PWAが常にバックグラウンドで実行されるとは限りません
+- OS全体の通知を直接抑制することはできません
+- PC全体の操作状況を完全に取得することはできません
 
-## Browser Constraints
+そのためFocusFlowでは、以下のようにWebで実現可能な方法へ落とし込んでいます。
 
-Webブラウザのセキュリティ制約により、OS全体の操作履歴や通知を直接制御することはできません。そのため、本作品では休憩判定をページ内の操作状況、通知抑制をアプリ内通知キューとして実装しています。スマートフォンではPWAがバックグラウンドで常時実行されるとは限らないため、タイマーの終了予定時刻を保存し、復帰時に残り時間や完了状態を補正します。通知はブラウザ通知が許可されている場合に利用できます。マイク・カメラチェックでは、初回のみブラウザの利用許可が必要です。取得した映像や音声は保存・送信しません。
+- タイマーは終了予定時刻を保存し、復帰時に残り時間を再計算
+- 通知抑制はアプリ内通知キューとして実装
+- 休憩判定はページ内の操作状況をもとに推定
+- ブラウザ通知はユーザーが許可した場合のみ利用
 
-## Getting Started
-
-Node.js 22.13以降が必要です。
+## Local Setup
 
 ```bash
 npm install
 npm run dev
 ```
 
-本番ビルドの確認：
+Build:
 
 ```bash
 npm run build
 ```
 
-## Deploy with GitHub and Cloudflare
+Test:
 
-このリポジトリはCloudflare Workersへデプロイできます。アカウント同期にはCloudflare D1 binding `DB` が必要です。未ログイン時は端末内保存で動作し、ログイン後はタスク・実績・表示設定がアカウントごとにD1へ保存されます。デプロイ時には `drizzle/` のmigrationをD1へ自動適用します。
+```bash
+npm test
+```
 
-### CloudflareのGit連携を使う場合（推奨）
+## Deployment
 
-1. GitHubへこのプロジェクトをpush
-2. Cloudflare Dashboardの **Workers & Pages** からGitHubリポジトリを接続
-3. Build commandを `npm run build` に設定
-4. Deploy commandを `npm run deploy` に設定
-5. Production branchを `main` に設定
+Cloudflare Workersへのデプロイを想定しています。
 
-以降は`main`へのpushごとに、自動でビルドと公開が行われます。
+```bash
+npm run deploy
+```
 
-### GitHub Actionsを使う場合
-
-同梱の`.github/workflows/deploy-cloudflare.yml`を利用できます。GitHubリポジトリのActions secretsに次の2項目を登録してください。
-
-- `CLOUDFLARE_API_TOKEN` — Cloudflare Workersの編集権限を持つAPIトークン
-- `CLOUDFLARE_ACCOUNT_ID` — 公開先CloudflareアカウントのID
-
-設定後、`main`へのpushまたはActions画面の手動実行でデプロイされます。
+Cloudflare側では、D1 binding名を `DB` に設定します。  
+デプロイ時に `drizzle/` のマイグレーションをD1へ適用し、その後Workerを公開します。
 
 ## Project Structure
 
 ```text
 app/
-├── focus-dashboard.tsx  # タイマー、タスク、各種チェックのUIとロジック
-├── globals.css          # デザインシステムとレスポンシブスタイル
-├── layout.tsx           # メタデータ、PWA、SNS共有設定
-└── page.tsx             # エントリーページ
+├── focus-dashboard.tsx      # メインUI、タイマー、タスク、設定、同期処理
+├── globals.css              # レイアウト、レスポンシブ、PWA向けスタイル
+├── layout.tsx               # メタデータ、PWA、OGP設定
+├── page.tsx                 # エントリーページ
+└── api/
+    ├── auth/route.ts        # 認証API
+    ├── sync/route.ts        # アカウントデータ同期API
+    ├── diagnostics/route.ts # D1診断API
+    └── _lib/                # 認証・D1接続ユーティリティ
+
+drizzle/
+└── *.sql                    # D1 migration
 
 public/
-├── manifest.webmanifest # ホーム画面追加設定
-├── offline.html         # オフライン時のフォールバック画面
-├── sw.js                # PWA用Service Worker
-└── og.png               # SNS共有用ビジュアル
+├── manifest.webmanifest     # PWA manifest
+├── sw.js                    # Service Worker
+├── offline.html             # オフラインフォールバック
+└── og.png                   # SNSプレビュー画像
 ```
 
 ## Future Improvements
 
-- アカウント単位のクラウド同期
-- カレンダーと実際の会議予定の連携
-- OSネイティブ版でのシステム通知抑制
-- 日・週・月単位の詳細分析とCSV出力
-- 集中時間や休憩間隔のパーソナライズ
+- BGM / 環境音モード
+- カレンダー連携による会議前チェックの自動表示
+- 月次レポート、CSVエクスポート
+- タグ別・プロジェクト別の集中時間分析
+- ネイティブアプリ化によるOSレベルの通知制御
 
 ---
 
-**FocusFlow** — 仕事量を増やすのではなく、集中と休息のリズムを整えるためのプロダクトです。
+FocusFlow is a productivity PWA designed to make focus work feel less fragmented: start a task, protect the session, take a break, and review the day in one place.
