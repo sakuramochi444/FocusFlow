@@ -18,6 +18,34 @@ type AuthPayload = {
   password?: string;
 };
 
+function authErrorResponse(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error("[FocusFlow auth]", message);
+
+  if (/UNIQUE|constraint/i.test(message)) {
+    return NextResponse.json({ error: "このメールアドレスはすでに登録されています", code: "EMAIL_EXISTS" }, { status: 409 });
+  }
+  if (/D1 binding DB is unavailable|env\.DB|Cannot read properties of undefined.*DB/i.test(message)) {
+    return NextResponse.json({
+      error: "D1 binding `DB` がWorkerに接続されていません。Cloudflareの対象Workerが `focusflow` で、D1 binding名が `DB` になっているか確認してください。",
+      code: "D1_BINDING_MISSING",
+      detail: message,
+    }, { status: 503 });
+  }
+  if (/SQLITE|no such table|no such column|D1_/i.test(message)) {
+    return NextResponse.json({
+      error: "D1へのSQL実行に失敗しました。migration適用状況を確認してください。",
+      code: "D1_SQL_ERROR",
+      detail: message,
+    }, { status: 503 });
+  }
+  return NextResponse.json({
+    error: "認証データベースに接続できませんでした。",
+    code: "AUTH_DATABASE_ERROR",
+    detail: message,
+  }, { status: 503 });
+}
+
 export async function GET(request: Request) {
   try {
     const user = await getCurrentUser(request);
@@ -85,9 +113,6 @@ export async function POST(request: Request) {
     const token = await createSession(user.id);
     return NextResponse.json({ user: { id: user.id, email: user.email, name: user.name } }, { headers: { "Set-Cookie": sessionCookie(token) } });
   } catch (error) {
-    if (error instanceof Error && /UNIQUE|constraint/i.test(error.message)) {
-      return NextResponse.json({ error: "このメールアドレスはすでに登録されています" }, { status: 409 });
-    }
-    return NextResponse.json({ error: "認証データベースに接続できませんでした。D1の設定とマイグレーションを確認してください。" }, { status: 503 });
+    return authErrorResponse(error);
   }
 }

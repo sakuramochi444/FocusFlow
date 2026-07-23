@@ -70,7 +70,7 @@ test("ships PWA manifest and service worker assets", async () => {
 });
 
 test("defines account database and sync API routes", async () => {
-  const [hosting, schema, authRoute, syncRoute, authStore, requestEnv, worker, migration, packagedMigration, packageJson, packageScript] = await Promise.all([
+  const [hosting, schema, authRoute, syncRoute, authStore, requestEnv, worker, viteConfig, wranglerConfig, migration, packagedMigration, packageJson, packageScript] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/auth/route.ts", import.meta.url), "utf8"),
@@ -78,6 +78,8 @@ test("defines account database and sync API routes", async () => {
     readFile(new URL("../app/api/_lib/auth-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/_lib/request-env.ts", import.meta.url), "utf8"),
     readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../dist/server/wrangler.json", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0000_zippy_starfox.sql", import.meta.url), "utf8"),
     readFile(new URL("../dist/server/migrations/0000_zippy_starfox.sql", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -92,9 +94,11 @@ test("defines account database and sync API routes", async () => {
   assert.match(authStore, /getFocusFlowEnv/);
   assert.match(requestEnv, /AsyncLocalStorage/);
   assert.match(worker, /runWithFocusFlowEnv/);
+  assert.match(viteConfig, /name: "focusflow"/);
+  assert.match(wranglerConfig, /"name":"focusflow"/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS `users`/);
   assert.match(packagedMigration, /CREATE TABLE IF NOT EXISTS `users`/);
   assert.match(packageJson, /package-d1-migrations\.mjs/);
-  assert.match(packageJson, /wrangler deploy --config dist\/server\/wrangler\.json/);
+  assert.match(packageJson, /wrangler deploy --name focusflow --config dist\/server\/wrangler\.json/);
   assert.match(packageScript, /dist", "server", "migrations"/);
 });
