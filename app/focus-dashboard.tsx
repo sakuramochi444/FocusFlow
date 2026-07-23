@@ -516,6 +516,19 @@ export function FocusDashboard() {
 
   const authRequired = authChecked && !account;
 
+  if (!hydrated) {
+    return (
+      <div className="app-shell boot-screen">
+        <div className="boot-card">
+          <span className="brand-mark"><Icon name="spark" /></span>
+          <span className="section-kicker">FOCUSFLOW</span>
+          <h1>作業環境を読み込んでいます</h1>
+          <p>アカウント認証と端末内の保存データを確認しています。</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">

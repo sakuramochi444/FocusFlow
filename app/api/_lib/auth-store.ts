@@ -1,3 +1,5 @@
+import { getFocusFlowEnv } from "./request-env";
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -37,6 +39,8 @@ export function getSessionToken(request: Request) {
 }
 
 export async function getD1() {
+  const requestEnv = getFocusFlowEnv();
+  if (requestEnv?.DB) return requestEnv.DB;
   const { env } = await import("cloudflare:workers");
   if (!env.DB) throw new Error("D1 binding DB is unavailable.");
   return env.DB;

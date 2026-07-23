@@ -37,6 +37,7 @@ test("keeps personal data local and provides configurable sections", async () =>
   assert.match(dashboard, /function AuthModal/);
   assert.match(dashboard, /authRequired/);
   assert.match(dashboard, /required \? "signup" : "signin"/);
+  assert.match(dashboard, /作業環境を読み込んでいます/);
   assert.match(dashboard, /onboardingComplete/);
   assert.match(dashboard, /初期設定を保存しました/);
   assert.match(dashboard, /visible:\s*VisibleSections/);
@@ -69,11 +70,14 @@ test("ships PWA manifest and service worker assets", async () => {
 });
 
 test("defines account database and sync API routes", async () => {
-  const [hosting, schema, authRoute, syncRoute, migration, packagedMigration, packageJson, packageScript] = await Promise.all([
+  const [hosting, schema, authRoute, syncRoute, authStore, requestEnv, worker, migration, packagedMigration, packageJson, packageScript] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/auth/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/_lib/auth-store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/_lib/request-env.ts", import.meta.url), "utf8"),
+    readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0000_zippy_starfox.sql", import.meta.url), "utf8"),
     readFile(new URL("../dist/server/migrations/0000_zippy_starfox.sql", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -85,6 +89,9 @@ test("defines account database and sync API routes", async () => {
   assert.match(schema, /userAppStates = sqliteTable/);
   assert.match(authRoute, /hashPassword/);
   assert.match(syncRoute, /getCurrentUser/);
+  assert.match(authStore, /getFocusFlowEnv/);
+  assert.match(requestEnv, /AsyncLocalStorage/);
+  assert.match(worker, /runWithFocusFlowEnv/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS `users`/);
   assert.match(packagedMigration, /CREATE TABLE IF NOT EXISTS `users`/);
   assert.match(packageJson, /package-d1-migrations\.mjs/);
