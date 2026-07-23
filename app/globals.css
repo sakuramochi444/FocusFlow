@@ -221,6 +221,25 @@ footer p { margin: 0; }
 .settings-header { flex: 0 0 auto; padding: 27px 30px 20px; border-bottom: 1px solid var(--line); position: relative; }
 .settings-header h2 { margin: 4px 0 4px; font-size: 23px; }.settings-header p { margin: 0; color: #858d86; font-size: 10px; }
 .settings-header .modal-close { right: 22px; top: 22px; }
+.onboarding-backdrop { z-index: 140; }
+.onboarding-modal { width: min(760px, 100%); padding: 0; overflow: hidden; text-align: left; }
+.onboarding-hero { padding: 32px 34px 21px; background: #f7f9f2; border-bottom: 1px solid var(--line); }
+.onboarding-hero .brand-mark { margin-bottom: 15px; }
+.onboarding-hero h2 { max-width: 560px; margin: 5px 0 7px; font-size: clamp(23px, 3vw, 31px); line-height: 1.15; letter-spacing: -1px; }
+.onboarding-hero p { max-width: 560px; margin: 0; color: #6f7a72; font-size: 11px; line-height: 1.7; }
+.guide-grid { padding: 20px 34px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.guide-card { min-height: 92px; border: 1px solid var(--line); border-radius: 13px; padding: 13px; display: grid; align-content: start; gap: 6px; background: #fff; }
+.guide-card strong { font-size: 10px; }
+.guide-card small { color: #89918a; font-size: 8px; line-height: 1.55; }
+.setup-form { padding: 18px 34px 0; display: grid; gap: 9px; }
+.text-setting { min-height: 64px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; display: grid; grid-template-columns: minmax(140px, .48fr) 1fr; align-items: center; gap: 12px; }
+.text-setting > span { display: grid; gap: 3px; }
+.text-setting strong { font-size: 9px; }
+.text-setting small { color: #9aa19b; font-size: 7px; line-height: 1.4; }
+.text-setting input { min-width: 0; width: 100%; border: 0; border-radius: 8px; outline: 0; background: #f0f3ed; padding: 9px 10px; color: var(--ink); font-size: 10px; }
+.form-error { margin: -3px 2px 2px; color: #b05245; font-size: 8px; }
+.settings-form-grid.compact { margin-bottom: 0; }
+.onboarding-start { width: calc(100% - 68px); margin: 20px 34px 30px; padding: 13px; }
 .settings-scroll { padding: 0 30px; overflow-y: auto; overscroll-behavior: contain; }
 .settings-section { padding: 23px 0; border-bottom: 1px solid #ecefea; }
 .settings-section:last-child { border-bottom: 0; }
@@ -235,6 +254,8 @@ footer p { margin: 0; }
 .setting-card input, .setting-row input { position: absolute; opacity: 0; pointer-events: none; }
 .setting-card input:checked + .toggle-ui, .setting-row input:checked + .toggle-ui { background: var(--ink); }
 .setting-card input:checked + .toggle-ui::after, .setting-row input:checked + .toggle-ui::after { transform: translateX(11px); }
+.profile-settings-grid { display: grid; grid-template-columns: 1fr 1fr minmax(140px, .6fr); gap: 8px; }
+.profile-settings-grid .text-setting { grid-template-columns: 1fr; }
 .settings-form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
 .select-setting { padding: 12px; border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 9px; }
 .select-setting > span { display: grid; gap: 3px; }.select-setting strong { font-size: 9px; }.select-setting small { color: #9aa19b; font-size: 7px; line-height: 1.4; }
@@ -278,6 +299,10 @@ footer p { margin: 0; }
   footer { display: none; }
   .toast { bottom: calc(88px + env(safe-area-inset-bottom)); right: 16px; left: 16px; justify-content: center; }
   .settings-modal { max-height: calc(100vh - 20px); }.settings-header, .settings-scroll, .settings-footer { padding-left: 20px; padding-right: 20px; }
+  .onboarding-modal { max-height: calc(100vh - 20px); overflow-y: auto; }
+  .onboarding-hero, .guide-grid, .setup-form { padding-left: 20px; padding-right: 20px; }
+  .guide-grid { grid-template-columns: 1fr; }
+  .onboarding-start { width: calc(100% - 40px); margin-left: 20px; margin-right: 20px; }
 }
 
 @media (max-width: 520px) {
@@ -292,7 +317,8 @@ footer p { margin: 0; }
   .meeting-card { padding: 23px 20px; }
   .modal { padding: 27px 18px 23px; }.check-grid { grid-template-columns: 1fr; }.modal h2 { font-size: 20px; }
   .settings-modal { padding: 0; border-radius: 20px; }.settings-header { padding-top: 23px; }.settings-header h2 { font-size: 20px; }
-  .visibility-grid, .settings-form-grid { grid-template-columns: 1fr; }.settings-section-title small { max-width: 220px; }.data-summary { flex-wrap: wrap; }.data-summary span { flex-basis: 30%; }
+  .visibility-grid, .settings-form-grid, .profile-settings-grid { grid-template-columns: 1fr; }.settings-section-title small { max-width: 220px; }.data-summary { flex-wrap: wrap; }.data-summary span { flex-basis: 30%; }
+  .text-setting { grid-template-columns: 1fr; }
   .settings-footer > span { max-width: 160px; line-height: 1.4; }
 }
 

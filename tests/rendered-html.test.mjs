@@ -27,6 +27,9 @@ test("keeps personal data local and provides configurable sections", async () =>
   const dashboard = await readFile(new URL("../app/focus-dashboard.tsx", import.meta.url), "utf8");
   assert.match(dashboard, /localStorage\.setItem\("focusflow-state"/);
   assert.match(dashboard, /function SettingsModal/);
+  assert.match(dashboard, /function OnboardingModal/);
+  assert.match(dashboard, /onboardingComplete/);
+  assert.match(dashboard, /初期設定を保存しました/);
   assert.match(dashboard, /visible:\s*VisibleSections/);
   assert.match(dashboard, /バックアップを書き出す/);
   assert.match(dashboard, /ホームに表示する項目/);
