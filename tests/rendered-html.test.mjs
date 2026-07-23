@@ -34,3 +34,22 @@ test("keeps personal data local and provides configurable sections", async () =>
   assert.match(dashboard, /バックアップを書き出す/);
   assert.match(dashboard, /ホームに表示する項目/);
 });
+
+test("ships PWA manifest and service worker assets", async () => {
+  const [layout, register, manifestRaw, worker, offline] = await Promise.all([
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/pwa-register.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/offline.html", import.meta.url), "utf8"),
+  ]);
+  const manifest = JSON.parse(manifestRaw);
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.scope, "/");
+  assert.match(layout, /manifest: "\/manifest\.webmanifest"/);
+  assert.match(register, /serviceWorker\.register\("\/sw\.js"/);
+  assert.match(worker, /CACHE_NAME = "focusflow-pwa-v1"/);
+  assert.match(worker, /networkFirst\(request, "\/offline\.html"\)/);
+  assert.match(offline, /オフラインです/);
+});

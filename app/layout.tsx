@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
+import { PwaRegister } from "./pwa-register";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -16,15 +17,17 @@ export async function generateMetadata(): Promise<Metadata> {
   const image = `${protocol}://${host}/og.png`;
   return {
     title, description, applicationName: "FocusFlow", manifest: "/manifest.webmanifest",
-    appleWebApp: { capable: true, statusBarStyle: "default", title: "FocusFlow" },
+    appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "FocusFlow" },
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg", apple: "/favicon.svg" },
+    formatDetection: { telephone: false },
+    category: "productivity",
     openGraph: { title, description, type: "website", images: [{ url: image, width: 1536, height: 1024, alt: "FocusFlow 作業管理アプリ" }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }
 
-export const viewport: Viewport = { themeColor: "#f4f6f0", width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = { themeColor: "#17211c", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="ja"><body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body></html>;
+  return <html lang="ja"><body className={`${geistSans.variable} ${geistMono.variable}`}>{children}<PwaRegister /></body></html>;
 }
