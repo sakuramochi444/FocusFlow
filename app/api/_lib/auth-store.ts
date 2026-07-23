@@ -8,6 +8,7 @@ export type AuthUser = {
 
 const SESSION_COOKIE = "focusflow_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const PASSWORD_HASH_ITERATIONS = 100000;
 
 export function sessionCookieName() {
   return SESSION_COOKIE;
@@ -60,7 +61,7 @@ export async function ensureSchema() {
 export async function hashPassword(password: string, salt = randomToken(24)) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode(salt), iterations: 120000 },
+    { name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode(salt), iterations: PASSWORD_HASH_ITERATIONS },
     key,
     256,
   );
