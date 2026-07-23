@@ -4,6 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Task = { id: number; title: string; estimate: number; done: boolean };
 type CheckState = "idle" | "checking" | "ok" | "warn";
+type FocusSession = {
+  id: number;
+  taskId: number;
+  taskTitle: string;
+  minutes: number;
+  startedAt: string;
+  endedAt: string;
+};
 type UserProfile = {
   name: string;
   role: string;
@@ -56,24 +64,64 @@ const INITIAL_TASKS: Task[] = [
   { id: 3, title: "レビューコメントに返信", estimate: 1, done: false },
 ];
 
-const WEEK = [
-  { day: "月", minutes: 95, sessions: 4 },
-  { day: "火", minutes: 125, sessions: 5 },
-  { day: "水", minutes: 75, sessions: 3 },
-  { day: "木", minutes: 150, sessions: 6 },
-  { day: "金", minutes: 105, sessions: 4 },
-  { day: "土", minutes: 25, sessions: 1 },
-  { day: "今日", minutes: 78, sessions: 3 },
-];
-
 function formatTime(seconds: number) {
   const mins = Math.floor(seconds / 60).toString().padStart(2, "0");
   const secs = (seconds % 60).toString().padStart(2, "0");
   return `${mins}:${secs}`;
 }
 
+function formatMinutes(minutes: number) {
+  if (minutes < 60) return `${minutes}分`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins ? `${hours}時間${mins}分` : `${hours}時間`;
+}
+
 function getInitial(name: string) {
   return name.trim().slice(0, 1) || "F";
+}
+
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function sessionDateKey(session: FocusSession) {
+  return dateKey(new Date(session.endedAt));
+}
+
+function sumMinutesForDate(sessions: FocusSession[], key: string) {
+  return sessions.filter((session) => sessionDateKey(session) === key).reduce((total, session) => total + session.minutes, 0);
+}
+
+function buildWeekStats(sessions: FocusSession[]) {
+  const today = new Date();
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(today, index - 6);
+    const key = dateKey(date);
+    const daySessions = sessions.filter((session) => sessionDateKey(session) === key);
+    return {
+      key,
+      day: index === 6 ? "今日" : ["日", "月", "火", "水", "木", "金", "土"][date.getDay()],
+      minutes: daySessions.reduce((total, session) => total + session.minutes, 0),
+      sessions: daySessions.length,
+    };
+  });
+}
+
+function countFocusStreak(sessions: FocusSession[]) {
+  const activeDays = new Set(sessions.map(sessionDateKey));
+  let streak = 0;
+  for (let offset = 0; offset < 365; offset += 1) {
+    if (!activeDays.has(dateKey(addDays(new Date(), -offset)))) break;
+    streak += 1;
+  }
+  return streak;
 }
 
 function Icon({ name }: { name: string }) {
@@ -94,7 +142,7 @@ export function FocusDashboard() {
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
   const [activeTask, setActiveTask] = useState(1);
   const [taskInput, setTaskInput] = useState("");
-  const [sessions, setSessions] = useState(3);
+  const [focusSessions, setFocusSessions] = useState<FocusSession[]>([]);
   const [quiet, setQuiet] = useState(true);
   const [queued, setQueued] = useState(4);
   const [idleMinutes, setIdleMinutes] = useState(47);
@@ -106,6 +154,7 @@ export function FocusDashboard() {
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [toast, setToast] = useState("");
   const lastActivity = useRef(Date.now() - 47 * 60 * 1000);
+  const sessionStartedAt = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -113,7 +162,7 @@ export function FocusDashboard() {
       if (saved) {
         const data = JSON.parse(saved);
         if (Array.isArray(data.tasks)) setTasks(data.tasks);
-        if (typeof data.sessions === "number") setSessions(data.sessions);
+        if (Array.isArray(data.focusSessions)) setFocusSessions(data.focusSessions);
         const restoredProfile = { ...DEFAULT_PROFILE, ...data.profile };
         setProfile(restoredProfile);
         setOnboardingOpen(!restoredProfile.onboardingComplete);
@@ -137,8 +186,8 @@ export function FocusDashboard() {
 
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem("focusflow-state", JSON.stringify({ tasks, sessions, settings, profile })); } catch { /* noop */ }
-  }, [hydrated, tasks, sessions, settings, profile]);
+    try { localStorage.setItem("focusflow-state", JSON.stringify({ tasks, focusSessions, settings, profile })); } catch { /* noop */ }
+  }, [hydrated, tasks, focusSessions, settings, profile]);
 
   useEffect(() => {
     if (!running) return;
@@ -147,7 +196,20 @@ export function FocusDashboard() {
         if (current > 1) return current - 1;
         setRunning(false);
         if (mode === "focus") {
-          setSessions((value) => value + 1);
+          const endedAt = new Date();
+          const active = tasks.find((task) => task.id === activeTask);
+          const recordedMinutes = Math.max(1, duration);
+          const startedAt = sessionStartedAt.current ?? new Date(endedAt.getTime() - recordedMinutes * 60000).toISOString();
+          const nextSession: FocusSession = {
+            id: endedAt.getTime(),
+            taskId: activeTask,
+            taskTitle: active?.title ?? "未選択のタスク",
+            minutes: recordedMinutes,
+            startedAt,
+            endedAt: endedAt.toISOString(),
+          };
+          setFocusSessions((items) => [...items, nextSession].slice(-500));
+          sessionStartedAt.current = null;
           if (settings.completionSound) {
             try {
               const audio = new AudioContext();
@@ -171,7 +233,7 @@ export function FocusDashboard() {
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [running, mode, settings.breakMinutes, settings.focusMinutes, settings.completionSound]);
+  }, [running, mode, duration, activeTask, tasks, settings.breakMinutes, settings.focusMinutes, settings.completionSound]);
 
   useEffect(() => {
     const activity = () => { lastActivity.current = Date.now(); };
@@ -204,12 +266,34 @@ export function FocusDashboard() {
   }, [settings.focusMinutes, settings.breakMinutes, mode, running]);
 
   const setTimerDuration = (minutes: number, nextMode: "focus" | "break" = mode) => {
-    setRunning(false); setDuration(minutes); setSeconds(minutes * 60); setMode(nextMode);
+    setRunning(false); setDuration(minutes); setSeconds(minutes * 60); setMode(nextMode); sessionStartedAt.current = null;
   };
 
   const progress = 1 - seconds / (duration * 60);
   const completed = tasks.filter((task) => task.done).length;
   const displayName = profile.name.trim() || "あなた";
+  const todayKey = dateKey(new Date());
+  const yesterdayKey = dateKey(addDays(new Date(), -1));
+  const todayMinutes = sumMinutesForDate(focusSessions, todayKey);
+  const yesterdayMinutes = sumMinutesForDate(focusSessions, yesterdayKey);
+  const todaySessions = focusSessions.filter((session) => sessionDateKey(session) === todayKey);
+  const weekStats = buildWeekStats(focusSessions);
+  const weekTotalMinutes = weekStats.reduce((total, item) => total + item.minutes, 0);
+  const weekGoalMinutes = profile.dailyGoalSessions * settings.focusMinutes * 7;
+  const weekRemainingMinutes = Math.max(0, weekGoalMinutes - weekTotalMinutes);
+  const focusScore = Math.min(100, Math.round((todaySessions.length / Math.max(1, profile.dailyGoalSessions)) * 100));
+  const streak = countFocusStreak(focusSessions);
+  const recentSessions = [...focusSessions].sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime()).slice(0, 3);
+  const bestPeriod = todaySessions.length
+    ? ["午前", "午後", "夜"].reduce((best, label) => {
+        const range = label === "午前" ? [5, 12] : label === "午後" ? [12, 18] : [18, 24];
+        const count = todaySessions.filter((session) => {
+          const hour = new Date(session.endedAt).getHours();
+          return hour >= range[0] && hour < range[1];
+        }).length;
+        return count > best.count ? { label, count } : best;
+      }, { label: "午前", count: 0 }).label
+    : "未記録";
 
   const toggleTask = (id: number) => {
     setTasks((items) => items.map((task) => task.id === id ? { ...task, done: !task.done } : task));
@@ -224,9 +308,12 @@ export function FocusDashboard() {
 
   const startFocus = () => {
     setRunning((value) => !value);
-    if (!running && settings.autoQuiet) {
-      setQuiet(true);
-      setToast("集中モードON — 通知をまとめます");
+    if (!running) {
+      if (mode === "focus" && !sessionStartedAt.current) sessionStartedAt.current = new Date().toISOString();
+      if (settings.autoQuiet) {
+        setQuiet(true);
+        setToast("集中モードON — 通知をまとめます");
+      }
     }
   };
 
@@ -244,7 +331,7 @@ export function FocusDashboard() {
           <button className="nav-item" onClick={() => setMeetingOpen(true)}><Icon name="meeting" /><span>会議チェック</span></button>
         </nav>
         <div className="sidebar-bottom">
-          <div className="mini-streak"><span>今週のリズム</span><strong>4日連続</strong><small>目標 {profile.dailyGoalSessions} ポモドーロ/日</small></div>
+          <div className="mini-streak"><span>今週のリズム</span><strong>{streak}日連続</strong><small>目標 {profile.dailyGoalSessions} ポモドーロ/日</small></div>
           <button className="nav-item" onClick={() => setSettingsOpen(true)}><Icon name="settings" /><span>設定</span></button>
           <div className="profile"><span className="avatar">{getInitial(displayName)}</span><span><strong>{displayName}</strong><small>{profile.role || "ローカル保存"}</small></span><span className="online" /></div>
         </div>
@@ -262,9 +349,9 @@ export function FocusDashboard() {
         </header>
 
         {settings.visible.overview && <section className="overview-grid" aria-label="今日の概要">
-          <div className="metric-card primary"><span className="metric-icon"><Icon name="timer" /></span><div><span>今日の集中</span><strong>1時間18分</strong><small><b>+12分</b> 昨日より</small></div></div>
+          <div className="metric-card primary"><span className="metric-icon"><Icon name="timer" /></span><div><span>今日の集中</span><strong>{formatMinutes(todayMinutes)}</strong><small><b>{todayMinutes >= yesterdayMinutes ? "+" : ""}{todayMinutes - yesterdayMinutes}分</b> 昨日より</small></div></div>
           <div className="metric-card"><span className="metric-icon purple"><Icon name="check" /></span><div><span>完了タスク</span><strong>{completed} / {tasks.length}</strong><small>あと{tasks.length - completed}件で完了</small></div></div>
-          <div className="metric-card"><span className="metric-icon amber"><Icon name="spark" /></span><div><span>フォーカススコア</span><strong>86 <em>/ 100</em></strong><small><b>好調</b> 午前がベスト</small></div></div>
+          <div className="metric-card"><span className="metric-icon amber"><Icon name="spark" /></span><div><span>フォーカススコア</span><strong>{focusScore} <em>/ 100</em></strong><small><b>{todaySessions.length}回完了</b> {bestPeriod}がベスト</small></div></div>
           <div className="metric-card"><span className="metric-icon green"><Icon name="leaf" /></span><div><span>連続作業</span><strong>{idleMinutes}分</strong><small>{idleMinutes >= settings.breakReminderMinutes ? "そろそろ小休憩を" : "良いペースです"}</small></div></div>
         </section>}
 
@@ -278,7 +365,7 @@ export function FocusDashboard() {
               <div className="timer-controls">
                 <button className="round secondary" onClick={() => setTimerDuration(duration)} aria-label="リセット"><Icon name="reset" /></button>
                 <button className="round primary" onClick={startFocus} aria-label={running ? "一時停止" : "開始"}><Icon name={running ? "pause" : "play"} /></button>
-                <button className="round secondary" onClick={() => setSeconds((s) => Math.max(60, s + 5 * 60))} aria-label="5分追加">+5</button>
+                <button className="round secondary" onClick={() => { setDuration((value) => value + 5); setSeconds((s) => Math.max(60, s + 5 * 60)); }} aria-label="5分追加">+5</button>
               </div>
               <div className="timer-presets">
                 {[15, 25, 45, 60].map((value) => <button key={value} className={duration === value ? "active" : ""} onClick={() => setTimerDuration(value, "focus")}>{value}分</button>)}
@@ -318,9 +405,15 @@ export function FocusDashboard() {
         {(settings.visible.insights || settings.visible.meeting) && <section id="insights" className={`insights-grid ${settings.visible.insights && settings.visible.meeting ? "" : "single"}`}>
           {settings.visible.insights && <div className="card chart-card">
             <div className="card-heading"><div><span className="section-kicker">WEEKLY INSIGHT</span><h2>集中のリズム</h2></div><span className="week-select">今週⌄</span></div>
-            <div className="chart-summary"><strong>10時間48分</strong><span>目標まで <b>あと2時間12分</b></span></div>
+            <div className="chart-summary"><strong>{formatMinutes(weekTotalMinutes)}</strong><span>目標まで <b>{formatMinutes(weekRemainingMinutes)}</b></span></div>
             <div className="bar-chart" aria-label="1週間の集中時間グラフ">
-              {WEEK.map((item, index) => <div className="bar-column" key={item.day}><span className="bar-value">{item.minutes >= 60 ? `${Math.floor(item.minutes/60)}h${item.minutes%60 || ""}` : `${item.minutes}m`}</span><div className={`bar ${index === WEEK.length - 1 ? "today" : ""}`} style={{ height: `${Math.max(18, item.minutes / 150 * 100)}%` }} /><small>{item.day}</small></div>)}
+              {weekStats.map((item, index) => <div className="bar-column" key={item.key}><span className="bar-value">{item.minutes >= 60 ? `${Math.floor(item.minutes/60)}h${item.minutes%60 || ""}` : `${item.minutes}m`}</span><div className={`bar ${index === weekStats.length - 1 ? "today" : ""}`} style={{ height: `${Math.max(18, item.minutes / Math.max(60, settings.focusMinutes * profile.dailyGoalSessions) * 100)}%` }} /><small>{item.day}</small></div>)}
+            </div>
+            <div className="session-history">
+              <div><strong>最近の記録</strong><small>{focusSessions.length}セッション保存中</small></div>
+              {recentSessions.length ? recentSessions.map((session) => (
+                <span key={session.id}><b>{session.taskTitle}</b><small>{formatMinutes(session.minutes)} ・ {new Date(session.endedAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}</small></span>
+              )) : <p>まだ集中記録がありません。タイマーを完了するとここに残ります。</p>}
             </div>
           </div>}
           {settings.visible.meeting && <div className="card meeting-card">
@@ -342,8 +435,8 @@ export function FocusDashboard() {
         setProfile(nextProfile); setSettings(nextSettings); setQuiet(nextSettings.autoQuiet);
         setTimerDuration(nextSettings.focusMinutes, "focus"); setOnboardingOpen(false); setToast("初期設定を保存しました");
       }} />}
-      {settingsOpen && <SettingsModal settings={settings} profile={profile} tasks={tasks} sessions={sessions} onChange={setSettings} onProfileChange={setProfile} onClose={() => setSettingsOpen(false)} onReset={() => {
-        setTasks(INITIAL_TASKS); setSessions(0); setSettings(DEFAULT_SETTINGS); setProfile(DEFAULT_PROFILE); setQuiet(DEFAULT_SETTINGS.autoQuiet); setOnboardingOpen(true);
+      {settingsOpen && <SettingsModal settings={settings} profile={profile} tasks={tasks} focusSessions={focusSessions} onChange={setSettings} onProfileChange={setProfile} onClose={() => setSettingsOpen(false)} onReset={() => {
+        setTasks(INITIAL_TASKS); setFocusSessions([]); setSettings(DEFAULT_SETTINGS); setProfile(DEFAULT_PROFILE); setQuiet(DEFAULT_SETTINGS.autoQuiet); setOnboardingOpen(true);
         setTimerDuration(DEFAULT_SETTINGS.focusMinutes, "focus"); setToast("設定とローカルデータを初期化しました");
       }} />}
       {toast && <div className="toast" role="status"><Icon name="check" />{toast}</div>}
@@ -416,12 +509,12 @@ function OnboardingModal({
 }
 
 function SettingsModal({
-  settings, profile, tasks, sessions, onChange, onProfileChange, onClose, onReset,
+  settings, profile, tasks, focusSessions, onChange, onProfileChange, onClose, onReset,
 }: {
   settings: AppSettings;
   profile: UserProfile;
   tasks: Task[];
-  sessions: number;
+  focusSessions: FocusSession[];
   onChange: (settings: AppSettings) => void;
   onProfileChange: (profile: UserProfile) => void;
   onClose: () => void;
@@ -434,7 +527,7 @@ function SettingsModal({
     onChange({ ...settings, visible: { ...settings.visible, [key]: value } });
   };
   const exportData = () => {
-    const payload = { app: "FocusFlow", exportedAt: new Date().toISOString(), tasks, sessions, settings, profile };
+    const payload = { app: "FocusFlow", exportedAt: new Date().toISOString(), tasks, focusSessions, settings, profile };
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
     const anchor = document.createElement("a");
     anchor.href = url; anchor.download = `focusflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -499,7 +592,7 @@ function SettingsModal({
 
           <section className="settings-section data-section">
             <div className="settings-section-title"><span className="settings-section-icon"><Icon name="home" /></span><span><strong>この端末のデータ</strong><small>サーバーへの送信やアカウント登録はありません</small></span><span className="local-badge">LOCAL ONLY</span></div>
-            <div className="data-summary"><span><b>{tasks.length}</b> タスク</span><span><b>{sessions}</b> 集中セッション</span><span><b>1</b> 端末</span></div>
+            <div className="data-summary"><span><b>{tasks.length}</b> タスク</span><span><b>{focusSessions.length}</b> 集中セッション</span><span><b>{formatMinutes(focusSessions.reduce((total, session) => total + session.minutes, 0))}</b> 記録</span></div>
             <div className="data-actions"><button className="button soft" onClick={exportData}>バックアップを書き出す</button><button className="danger-button" onClick={resetData}>すべて初期化</button></div>
           </section>
         </div>

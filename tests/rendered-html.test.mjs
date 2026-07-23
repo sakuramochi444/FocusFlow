@@ -26,6 +26,10 @@ test("server-renders the FocusFlow application", async () => {
 test("keeps personal data local and provides configurable sections", async () => {
   const dashboard = await readFile(new URL("../app/focus-dashboard.tsx", import.meta.url), "utf8");
   assert.match(dashboard, /localStorage\.setItem\("focusflow-state"/);
+  assert.match(dashboard, /type FocusSession/);
+  assert.match(dashboard, /focusSessions/);
+  assert.match(dashboard, /buildWeekStats\(focusSessions\)/);
+  assert.match(dashboard, /最近の記録/);
   assert.match(dashboard, /function SettingsModal/);
   assert.match(dashboard, /function OnboardingModal/);
   assert.match(dashboard, /onboardingComplete/);
