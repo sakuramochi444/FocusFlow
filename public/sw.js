@@ -42,6 +42,20 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(cacheFirst(request));
 });
 
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const existing = clients.find((client) => {
+        const url = new URL(client.url);
+        return url.hostname.includes("focusflow") || url.pathname === "/";
+      });
+      if (existing) return existing.focus();
+      return self.clients.openWindow("/");
+    }),
+  );
+});
+
 async function networkFirst(request, fallbackUrl) {
   const cache = await caches.open(CACHE_NAME);
   try {

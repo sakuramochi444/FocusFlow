@@ -30,8 +30,11 @@ test("keeps personal data local and provides configurable sections", async () =>
   assert.match(dashboard, /focusSessions/);
   assert.match(dashboard, /buildWeekStats\(focusSessions\)/);
   assert.match(dashboard, /最近の記録/);
+  assert.match(dashboard, /timerEndsAt/);
+  assert.match(dashboard, /notifyUser/);
   assert.match(dashboard, /function SettingsModal/);
   assert.match(dashboard, /function OnboardingModal/);
+  assert.match(dashboard, /function AuthModal/);
   assert.match(dashboard, /onboardingComplete/);
   assert.match(dashboard, /初期設定を保存しました/);
   assert.match(dashboard, /visible:\s*VisibleSections/);
@@ -55,5 +58,23 @@ test("ships PWA manifest and service worker assets", async () => {
   assert.match(register, /serviceWorker\.register\("\/sw\.js"/);
   assert.match(worker, /CACHE_NAME = "focusflow-pwa-v1"/);
   assert.match(worker, /networkFirst\(request, "\/offline\.html"\)/);
+  assert.match(worker, /notificationclick/);
   assert.match(offline, /オフラインです/);
+});
+
+test("defines account database and sync API routes", async () => {
+  const [hosting, schema, authRoute, syncRoute, migration] = await Promise.all([
+    readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/auth/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0000_zippy_starfox.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(hosting, /"d1": "DB"/);
+  assert.match(schema, /users = sqliteTable/);
+  assert.match(schema, /authSessions = sqliteTable/);
+  assert.match(schema, /userAppStates = sqliteTable/);
+  assert.match(authRoute, /hashPassword/);
+  assert.match(syncRoute, /getCurrentUser/);
+  assert.match(migration, /CREATE TABLE `users`/);
 });

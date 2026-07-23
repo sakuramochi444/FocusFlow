@@ -12,11 +12,32 @@ type FocusSession = {
   startedAt: string;
   endedAt: string;
 };
+type AccountUser = {
+  id: string;
+  email: string;
+  name: string;
+};
+type TimerSnapshot = {
+  mode: "focus" | "break";
+  duration: number;
+  seconds: number;
+  running: boolean;
+  endsAt: number | null;
+  startedAt: string | null;
+  activeTask: number;
+};
 type UserProfile = {
   name: string;
   role: string;
   dailyGoalSessions: number;
   onboardingComplete: boolean;
+};
+type StoredState = {
+  tasks: Task[];
+  focusSessions: FocusSession[];
+  settings: AppSettings;
+  profile: UserProfile;
+  timer?: TimerSnapshot;
 };
 type VisibleSections = {
   overview: boolean;
@@ -32,6 +53,7 @@ type AppSettings = {
   breakReminderMinutes: number;
   autoQuiet: boolean;
   completionSound: boolean;
+  browserNotifications: boolean;
   visible: VisibleSections;
 };
 
@@ -41,6 +63,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   breakReminderMinutes: 45,
   autoQuiet: true,
   completionSound: true,
+  browserNotifications: false,
   visible: {
     overview: true,
     tasks: true,
@@ -124,6 +147,30 @@ function countFocusStreak(sessions: FocusSession[]) {
   return streak;
 }
 
+function normalizeStoredState(data: Partial<StoredState>): Partial<StoredState> {
+  return {
+    tasks: Array.isArray(data.tasks) ? data.tasks : undefined,
+    focusSessions: Array.isArray(data.focusSessions) ? data.focusSessions : undefined,
+    settings: data.settings
+      ? { ...DEFAULT_SETTINGS, ...data.settings, visible: { ...DEFAULT_SETTINGS.visible, ...data.settings.visible } }
+      : undefined,
+    profile: data.profile ? { ...DEFAULT_PROFILE, ...data.profile } : undefined,
+    timer: data.timer,
+  };
+}
+
+async function notifyUser(title: string, body: string) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try {
+    const registration = await navigator.serviceWorker?.ready;
+    if (registration) {
+      await registration.showNotification(title, { body, icon: "/favicon.svg", badge: "/favicon.svg" });
+      return;
+    }
+  } catch { /* fall back to page notification */ }
+  try { new Notification(title, { body, icon: "/favicon.svg" }); } catch { /* noop */ }
+}
+
 function Icon({ name }: { name: string }) {
   const icons: Record<string, string> = {
     home: "⌂", timer: "◷", chart: "▥", meeting: "◉", settings: "⚙",
@@ -150,9 +197,13 @@ export function FocusDashboard() {
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [account, setAccount] = useState<AccountUser | null>(null);
+  const [syncStatus, setSyncStatus] = useState<"local" | "syncing" | "synced" | "error">("local");
   const [toast, setToast] = useState("");
+  const [timerEndsAt, setTimerEndsAt] = useState<number | null>(null);
   const lastActivity = useRef(Date.now() - 47 * 60 * 1000);
   const sessionStartedAt = useRef<string | null>(null);
 
@@ -160,22 +211,34 @@ export function FocusDashboard() {
     try {
       const saved = localStorage.getItem("focusflow-state");
       if (saved) {
-        const data = JSON.parse(saved);
-        if (Array.isArray(data.tasks)) setTasks(data.tasks);
-        if (Array.isArray(data.focusSessions)) setFocusSessions(data.focusSessions);
-        const restoredProfile = { ...DEFAULT_PROFILE, ...data.profile };
+        const data = normalizeStoredState(JSON.parse(saved));
+        if (data.tasks) setTasks(data.tasks);
+        if (data.focusSessions) setFocusSessions(data.focusSessions);
+        const restoredProfile = data.profile ?? DEFAULT_PROFILE;
         setProfile(restoredProfile);
         setOnboardingOpen(!restoredProfile.onboardingComplete);
         if (data.settings) {
-          const restored = {
-            ...DEFAULT_SETTINGS,
-            ...data.settings,
-            visible: { ...DEFAULT_SETTINGS.visible, ...data.settings.visible },
-          };
+          const restored = data.settings;
           setSettings(restored);
           setQuiet(restored.autoQuiet);
-          setDuration(restored.focusMinutes);
-          setSeconds(restored.focusMinutes * 60);
+          if (!data.timer) {
+            setDuration(restored.focusMinutes);
+            setSeconds(restored.focusMinutes * 60);
+          }
+        }
+        if (data.timer) {
+          setMode(data.timer.mode);
+          setDuration(data.timer.duration);
+          setActiveTask(data.timer.activeTask);
+          sessionStartedAt.current = data.timer.startedAt;
+          if (data.timer.running && data.timer.endsAt) {
+            const remaining = Math.max(0, Math.ceil((data.timer.endsAt - Date.now()) / 1000));
+            setSeconds(remaining > 0 ? remaining : 1);
+            setTimerEndsAt(data.timer.endsAt);
+            setRunning(true);
+          } else {
+            setSeconds(data.timer.seconds);
+          }
         }
       } else {
         setOnboardingOpen(true);
@@ -186,54 +249,139 @@ export function FocusDashboard() {
 
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem("focusflow-state", JSON.stringify({ tasks, focusSessions, settings, profile })); } catch { /* noop */ }
-  }, [hydrated, tasks, focusSessions, settings, profile]);
+    const timer: TimerSnapshot = { mode, duration, seconds, running, endsAt: timerEndsAt, startedAt: sessionStartedAt.current, activeTask };
+    try { localStorage.setItem("focusflow-state", JSON.stringify({ tasks, focusSessions, settings, profile, timer })); } catch { /* noop */ }
+  }, [hydrated, tasks, focusSessions, settings, profile, mode, duration, seconds, running, timerEndsAt, activeTask]);
+
+  const applyStoredState = useCallback((state: Partial<StoredState>) => {
+    const data = normalizeStoredState(state);
+    if (data.tasks) setTasks(data.tasks);
+    if (data.focusSessions) setFocusSessions(data.focusSessions);
+    if (data.settings) {
+      setSettings(data.settings);
+      setQuiet(data.settings.autoQuiet);
+      if (!running) {
+        const minutes = mode === "focus" ? data.settings.focusMinutes : data.settings.breakMinutes;
+        setDuration(minutes);
+        setSeconds(minutes * 60);
+      }
+    }
+    if (data.profile) {
+      setProfile(data.profile);
+      setOnboardingOpen(!data.profile.onboardingComplete);
+    }
+  }, [mode, running]);
+
+  const currentStoredState = useCallback((): StoredState => ({
+    tasks,
+    focusSessions,
+    settings,
+    profile,
+    timer: { mode, duration, seconds, running, endsAt: timerEndsAt, startedAt: sessionStartedAt.current, activeTask },
+  }), [tasks, focusSessions, settings, profile, mode, duration, seconds, running, timerEndsAt, activeTask]);
 
   useEffect(() => {
-    if (!running) return;
-    const timer = window.setInterval(() => {
-      setSeconds((current) => {
-        if (current > 1) return current - 1;
-        setRunning(false);
-        if (mode === "focus") {
-          const endedAt = new Date();
-          const active = tasks.find((task) => task.id === activeTask);
-          const recordedMinutes = Math.max(1, duration);
-          const startedAt = sessionStartedAt.current ?? new Date(endedAt.getTime() - recordedMinutes * 60000).toISOString();
-          const nextSession: FocusSession = {
-            id: endedAt.getTime(),
-            taskId: activeTask,
-            taskTitle: active?.title ?? "未選択のタスク",
-            minutes: recordedMinutes,
-            startedAt,
-            endedAt: endedAt.toISOString(),
-          };
-          setFocusSessions((items) => [...items, nextSession].slice(-500));
-          sessionStartedAt.current = null;
-          if (settings.completionSound) {
-            try {
-              const audio = new AudioContext();
-              const oscillator = audio.createOscillator();
-              const gain = audio.createGain();
-              gain.gain.value = 0.035; oscillator.frequency.value = 660;
-              oscillator.connect(gain); gain.connect(audio.destination);
-              oscillator.start(); oscillator.stop(audio.currentTime + 0.18);
-              window.setTimeout(() => audio.close(), 400);
-            } catch { /* sound may be blocked until the first user interaction */ }
-          }
-          setToast("集中セッション完了。少し休みましょう！");
-          setMode("break");
-          setDuration(settings.breakMinutes);
-          return settings.breakMinutes * 60;
+    if (!hydrated) return;
+    let cancelled = false;
+    fetch("/api/auth", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!cancelled && data?.user) setAccount(data.user);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !account) return;
+    let cancelled = false;
+    setSyncStatus("syncing");
+    fetch("/api/sync", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then(async (data) => {
+        if (cancelled) return;
+        if (data?.state) {
+          applyStoredState(data.state);
+          setSyncStatus("synced");
+        } else {
+          await fetch("/api/sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(currentStoredState()) });
+          if (!cancelled) setSyncStatus("synced");
         }
-        setToast("休憩終了。次の集中を始められます");
-        setMode("focus");
-        setDuration(settings.focusMinutes);
-        return settings.focusMinutes * 60;
-      });
+      })
+      .catch(() => !cancelled && setSyncStatus("error"));
+    return () => { cancelled = true; };
+  }, [account, applyStoredState, currentStoredState, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !account || running) return;
+    setSyncStatus("syncing");
+    const timeout = window.setTimeout(() => {
+      fetch("/api/sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(currentStoredState()) })
+        .then((response) => setSyncStatus(response.ok ? "synced" : "error"))
+        .catch(() => setSyncStatus("error"));
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [account, currentStoredState, hydrated, running]);
+
+  const completeTimer = useCallback(() => {
+    setRunning(false);
+    setTimerEndsAt(null);
+    if (mode === "focus") {
+      const endedAt = new Date();
+      const active = tasks.find((task) => task.id === activeTask);
+      const recordedMinutes = Math.max(1, duration);
+      const startedAt = sessionStartedAt.current ?? new Date(endedAt.getTime() - recordedMinutes * 60000).toISOString();
+      const nextSession: FocusSession = {
+        id: endedAt.getTime(),
+        taskId: activeTask,
+        taskTitle: active?.title ?? "未選択のタスク",
+        minutes: recordedMinutes,
+        startedAt,
+        endedAt: endedAt.toISOString(),
+      };
+      setFocusSessions((items) => [...items, nextSession].slice(-500));
+      sessionStartedAt.current = null;
+      if (settings.completionSound) {
+        try {
+          const audio = new AudioContext();
+          const oscillator = audio.createOscillator();
+          const gain = audio.createGain();
+          gain.gain.value = 0.035; oscillator.frequency.value = 660;
+          oscillator.connect(gain); gain.connect(audio.destination);
+          oscillator.start(); oscillator.stop(audio.currentTime + 0.18);
+          window.setTimeout(() => audio.close(), 400);
+        } catch { /* sound may be blocked until the first user interaction */ }
+      }
+      setToast("集中セッション完了。少し休みましょう！");
+      if (settings.browserNotifications) void notifyUser("FocusFlow", "集中セッションが完了しました。少し休みましょう。");
+      setMode("break");
+      setDuration(settings.breakMinutes);
+      setSeconds(settings.breakMinutes * 60);
+      return;
+    }
+    setToast("休憩終了。次の集中を始められます");
+    if (settings.browserNotifications) void notifyUser("FocusFlow", "休憩が終わりました。次の集中を始められます。");
+    setMode("focus");
+    setDuration(settings.focusMinutes);
+    setSeconds(settings.focusMinutes * 60);
+  }, [activeTask, duration, mode, settings.breakMinutes, settings.browserNotifications, settings.completionSound, settings.focusMinutes, tasks]);
+
+  useEffect(() => {
+    if (!running || !timerEndsAt) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((timerEndsAt - Date.now()) / 1000));
+      if (remaining <= 0) {
+        completeTimer();
+        return;
+      }
+      setSeconds(remaining);
+    };
+    tick();
+    const timer = window.setInterval(() => {
+      tick();
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [running, mode, duration, activeTask, tasks, settings.breakMinutes, settings.focusMinutes, settings.completionSound]);
+  }, [completeTimer, running, timerEndsAt]);
 
   useEffect(() => {
     const activity = () => { lastActivity.current = Date.now(); };
@@ -267,6 +415,7 @@ export function FocusDashboard() {
 
   const setTimerDuration = (minutes: number, nextMode: "focus" | "break" = mode) => {
     setRunning(false); setDuration(minutes); setSeconds(minutes * 60); setMode(nextMode); sessionStartedAt.current = null;
+    setTimerEndsAt(null);
   };
 
   const progress = 1 - seconds / (duration * 60);
@@ -307,14 +456,42 @@ export function FocusDashboard() {
   };
 
   const startFocus = () => {
-    setRunning((value) => !value);
-    if (!running) {
-      if (mode === "focus" && !sessionStartedAt.current) sessionStartedAt.current = new Date().toISOString();
-      if (settings.autoQuiet) {
-        setQuiet(true);
-        setToast("集中モードON — 通知をまとめます");
-      }
+    if (running) {
+      setRunning(false);
+      setTimerEndsAt(null);
+      return;
     }
+    if (mode === "focus" && !sessionStartedAt.current) sessionStartedAt.current = new Date().toISOString();
+    setTimerEndsAt(Date.now() + seconds * 1000);
+    setRunning(true);
+    if (settings.autoQuiet) {
+      setQuiet(true);
+      setToast("集中モードON — 通知をまとめます");
+    }
+  };
+
+  const startBreakTimer = () => {
+    setBreakDone(true);
+    sessionStartedAt.current = null;
+    setMode("break");
+    setDuration(settings.breakMinutes);
+    setSeconds(settings.breakMinutes * 60);
+    setTimerEndsAt(Date.now() + settings.breakMinutes * 60 * 1000);
+    setRunning(true);
+  };
+
+  const handleAuthSuccess = (user: AccountUser) => {
+    setAccount(user);
+    setAuthOpen(false);
+    setProfile((value) => ({ ...value, name: value.name || user.name, onboardingComplete: true }));
+    setToast("アカウントに接続しました");
+  };
+
+  const logout = async () => {
+    await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "logout" }) }).catch(() => undefined);
+    setAccount(null);
+    setSyncStatus("local");
+    setToast("この端末の保存に切り替えました");
   };
 
   return (
@@ -333,7 +510,7 @@ export function FocusDashboard() {
         <div className="sidebar-bottom">
           <div className="mini-streak"><span>今週のリズム</span><strong>{streak}日連続</strong><small>目標 {profile.dailyGoalSessions} ポモドーロ/日</small></div>
           <button className="nav-item" onClick={() => setSettingsOpen(true)}><Icon name="settings" /><span>設定</span></button>
-          <div className="profile"><span className="avatar">{getInitial(displayName)}</span><span><strong>{displayName}</strong><small>{profile.role || "ローカル保存"}</small></span><span className="online" /></div>
+          <div className="profile"><span className="avatar">{getInitial(displayName)}</span><span><strong>{displayName}</strong><small>{account ? `同期: ${syncStatus === "synced" ? "完了" : syncStatus === "syncing" ? "保存中" : "要確認"}` : "ローカル保存"}</small></span><span className="online" /></div>
         </div>
       </aside>
 
@@ -343,6 +520,9 @@ export function FocusDashboard() {
           <div className="top-actions">
             <button className={`quiet-pill ${quiet ? "on" : ""}`} onClick={() => setQuiet(!quiet)} aria-pressed={quiet}>
               <span className="status-dot" /><span><b>通知抑制</b><small>{quiet ? "集中時に自動ON" : "オフ"}</small></span><span className="switch" />
+            </button>
+            <button className="account-pill" onClick={() => account ? logout() : setAuthOpen(true)}>
+              <span className="avatar mini">{account ? getInitial(account.name) : "＋"}</span><span><b>{account ? account.name : "ログイン"}</b><small>{account ? account.email : "DBに同期"}</small></span>
             </button>
             <button className="icon-button" aria-label="通知"><Icon name="bell" /><span className="badge">{queued}</span></button>
           </div>
@@ -365,7 +545,7 @@ export function FocusDashboard() {
               <div className="timer-controls">
                 <button className="round secondary" onClick={() => setTimerDuration(duration)} aria-label="リセット"><Icon name="reset" /></button>
                 <button className="round primary" onClick={startFocus} aria-label={running ? "一時停止" : "開始"}><Icon name={running ? "pause" : "play"} /></button>
-                <button className="round secondary" onClick={() => { setDuration((value) => value + 5); setSeconds((s) => Math.max(60, s + 5 * 60)); }} aria-label="5分追加">+5</button>
+                <button className="round secondary" onClick={() => { setDuration((value) => value + 5); setSeconds((s) => Math.max(60, s + 5 * 60)); if (timerEndsAt) setTimerEndsAt(timerEndsAt + 5 * 60 * 1000); }} aria-label="5分追加">+5</button>
               </div>
               <div className="timer-presets">
                 {[15, 25, 45, 60].map((value) => <button key={value} className={duration === value ? "active" : ""} onClick={() => setTimerDuration(value, "focus")}>{value}分</button>)}
@@ -391,7 +571,7 @@ export function FocusDashboard() {
 
           {settings.visible.smartBreak && <section className={`card break-card ${idleMinutes >= settings.breakReminderMinutes ? "needs-break" : ""}`}>
             <div className="break-visual"><span className="steam">〰</span><span className="cup">▰</span></div>
-            <div><span className="section-kicker">SMART BREAK</span><h2>{breakDone ? "いい休憩でした！" : "ひと息入れませんか？"}</h2><p>{breakDone ? "目と肩を休められました。準備ができたら再開しましょう。" : `${idleMinutes}分間、集中が続いています。90秒だけ窓の外を見て、肩を回すのがおすすめです。`}</p><div className="break-actions"><button className="button dark" onClick={() => { setBreakDone(true); setTimerDuration(settings.breakMinutes, "break"); setRunning(true); }}>{settings.breakMinutes}分休憩する</button><button className="text-button" onClick={() => setIdleMinutes(0)}>あとで</button></div></div>
+            <div><span className="section-kicker">SMART BREAK</span><h2>{breakDone ? "いい休憩でした！" : "ひと息入れませんか？"}</h2><p>{breakDone ? "目と肩を休められました。準備ができたら再開しましょう。" : `${idleMinutes}分間、集中が続いています。90秒だけ窓の外を見て、肩を回すのがおすすめです。`}</p><div className="break-actions"><button className="button dark" onClick={startBreakTimer}>{settings.breakMinutes}分休憩する</button><button className="text-button" onClick={() => setIdleMinutes(0)}>あとで</button></div></div>
           </section>}
 
           {settings.visible.notificationDigest && <section className="card quiet-card">
@@ -431,6 +611,7 @@ export function FocusDashboard() {
         <a className="active" href="#top"><Icon name="home" /><span>今日</span></a><a href="#timer"><Icon name="timer" /><span>集中</span></a><button onClick={() => setMeetingOpen(true)}><Icon name="meeting" /><span>会議</span></button><a href="#insights"><Icon name="chart" /><span>記録</span></a><button onClick={() => setSettingsOpen(true)}><Icon name="settings" /><span>設定</span></button>
       </nav>
       {meetingOpen && <MeetingChecker onClose={() => setMeetingOpen(false)} />}
+      {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onSuccess={handleAuthSuccess} />}
       {onboardingOpen && <OnboardingModal profile={profile} settings={settings} onComplete={(nextProfile, nextSettings) => {
         setProfile(nextProfile); setSettings(nextSettings); setQuiet(nextSettings.autoQuiet);
         setTimerDuration(nextSettings.focusMinutes, "focus"); setOnboardingOpen(false); setToast("初期設定を保存しました");
@@ -503,6 +684,66 @@ function OnboardingModal({
         </div>
 
         <button className="button dark full onboarding-start" onClick={complete}>FocusFlowを始める</button>
+      </div>
+    </div>
+  );
+}
+
+function AuthModal({
+  onClose, onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: (user: AccountUser) => void;
+}) {
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, email, name, password }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error ?? "認証に失敗しました");
+        return;
+      }
+      onSuccess(data.user);
+    } catch {
+      setError("通信状態を確認してください");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <button className="modal-close" onClick={onClose} aria-label="認証を閉じる">×</button>
+        <span className="modal-icon"><Icon name="spark" /></span>
+        <span className="section-kicker">ACCOUNT SYNC</span>
+        <h2 id="auth-title">{mode === "signin" ? "アカウントにログイン" : "アカウントを作成"}</h2>
+        <p>ログインすると、タスク・設定・集中記録がD1に保存され、端末を変えても同じデータを使えます。</p>
+        <div className="auth-tabs">
+          <button className={mode === "signin" ? "selected" : ""} onClick={() => setMode("signin")}>ログイン</button>
+          <button className={mode === "signup" ? "selected" : ""} onClick={() => setMode("signup")}>新規登録</button>
+        </div>
+        <div className="auth-form">
+          {mode === "signup" && <label><span>表示名</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="例: 佐藤 悠" /></label>}
+          <label><span>メールアドレス</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
+          <label><span>パスワード</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="8文字以上" onKeyDown={(event) => event.key === "Enter" && submit()} /></label>
+        </div>
+        {error && <p className="form-error auth-error">{error}</p>}
+        <button className="button dark full" onClick={submit} disabled={loading}>{loading ? "接続中…" : mode === "signin" ? "ログイン" : "登録して同期"}</button>
+        <small className="privacy-note">パスワードはハッシュ化して保存します。集中データはアカウントごとに分離されます。</small>
       </div>
     </div>
   );
@@ -588,6 +829,10 @@ function SettingsModal({
             </div>
             <label className="setting-row"><span><strong>集中時に通知抑制を自動ON</strong><small>セッション開始時にアプリ内通知を保留します</small></span><input type="checkbox" checked={settings.autoQuiet} onChange={(event) => update("autoQuiet", event.target.checked)} /><span className="toggle-ui" /></label>
             <label className="setting-row"><span><strong>終了音を鳴らす</strong><small>集中セッションの終了時に短い音で知らせます</small></span><input type="checkbox" checked={settings.completionSound} onChange={(event) => update("completionSound", event.target.checked)} /><span className="toggle-ui" /></label>
+            <label className="setting-row"><span><strong>ブラウザ通知を使う</strong><small>許可済みの場合、集中や休憩の終了をOS通知で知らせます</small></span><input type="checkbox" checked={settings.browserNotifications} onChange={async (event) => {
+              if (event.target.checked && "Notification" in window && Notification.permission === "default") await Notification.requestPermission();
+              update("browserNotifications", event.target.checked);
+            }} /><span className="toggle-ui" /></label>
           </section>
 
           <section className="settings-section data-section">
