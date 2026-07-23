@@ -118,7 +118,7 @@ npm run build
 
 ## Deploy with GitHub and Cloudflare
 
-このリポジトリはCloudflare Workersへデプロイできます。アカウント同期にはCloudflare D1 binding `DB` が必要です。未ログイン時は端末内保存で動作し、ログイン後はタスク・実績・表示設定がアカウントごとにD1へ保存されます。
+このリポジトリはCloudflare Workersへデプロイできます。アカウント同期にはCloudflare D1 binding `DB` が必要です。未ログイン時は端末内保存で動作し、ログイン後はタスク・実績・表示設定がアカウントごとにD1へ保存されます。デプロイ時には `drizzle/` のmigrationをD1へ自動適用します。
 
 ### CloudflareのGit連携を使う場合（推奨）
 
