@@ -1,4 +1,4 @@
-CREATE TABLE `auth_sessions` (
+CREATE TABLE IF NOT EXISTS `auth_sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
 	`token_hash` text NOT NULL,
@@ -6,15 +6,15 @@ CREATE TABLE `auth_sessions` (
 	`created_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `auth_sessions_token_hash_unique` ON `auth_sessions` (`token_hash`);--> statement-breakpoint
-CREATE TABLE `user_app_states` (
+CREATE UNIQUE INDEX IF NOT EXISTS `auth_sessions_token_hash_unique` ON `auth_sessions` (`token_hash`);--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `user_app_states` (
 	`user_id` text PRIMARY KEY NOT NULL,
 	`payload` text NOT NULL,
 	`version` integer DEFAULT 1 NOT NULL,
 	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `users` (
+CREATE TABLE IF NOT EXISTS `users` (
 	`id` text PRIMARY KEY NOT NULL,
 	`email` text NOT NULL,
 	`name` text NOT NULL,
@@ -24,4 +24,4 @@ CREATE TABLE `users` (
 	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);
+CREATE UNIQUE INDEX IF NOT EXISTS `users_email_unique` ON `users` (`email`);

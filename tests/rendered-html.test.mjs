@@ -85,8 +85,8 @@ test("defines account database and sync API routes", async () => {
   assert.match(schema, /userAppStates = sqliteTable/);
   assert.match(authRoute, /hashPassword/);
   assert.match(syncRoute, /getCurrentUser/);
-  assert.match(migration, /CREATE TABLE `users`/);
-  assert.match(packagedMigration, /CREATE TABLE `users`/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS `users`/);
+  assert.match(packagedMigration, /CREATE TABLE IF NOT EXISTS `users`/);
   assert.match(packageJson, /package-d1-migrations\.mjs/);
   assert.match(packageScript, /dist", "server", "migrations"/);
 });
