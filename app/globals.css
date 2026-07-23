@@ -132,6 +132,8 @@ a { color: inherit; text-decoration: none; }
 .task-row.done .task-title span { text-decoration: line-through; color: #9ba29c; }
 .task-play { width: 29px; height: 29px; border: 0; border-radius: 9px; background: #f0f3ed; display: grid; place-items: center; cursor: pointer; }
 .task-play .icon { font-size: 9px; }
+.task-delete { border: 0; border-radius: 9px; background: #fff2ee; color: #b05245; padding: 7px 9px; font-size: 8px; font-weight: 760; cursor: pointer; }
+.empty-state { margin: 18px 0; padding: 16px; border: 1px dashed #d9dfd5; border-radius: 12px; color: #8d958e; font-size: 10px; line-height: 1.6; text-align: center; }
 .add-task { margin-top: auto; min-height: 53px; display: flex; align-items: center; gap: 9px; color: #8c958c; }
 .add-task input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 10px; color: var(--ink); }
 .add-task input::placeholder { color: #a2a9a2; }

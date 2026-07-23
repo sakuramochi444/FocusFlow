@@ -81,11 +81,7 @@ const DEFAULT_PROFILE: UserProfile = {
   onboardingComplete: false,
 };
 
-const INITIAL_TASKS: Task[] = [
-  { id: 1, title: "提案書の構成を仕上げる", estimate: 2, done: false },
-  { id: 2, title: "ユーザー調査メモを整理", estimate: 1, done: true },
-  { id: 3, title: "レビューコメントに返信", estimate: 1, done: false },
-];
+const INITIAL_TASKS: Task[] = [];
 
 function formatTime(seconds: number) {
   const mins = Math.floor(seconds / 60).toString().padStart(2, "0");
@@ -187,7 +183,7 @@ export function FocusDashboard() {
   const [running, setRunning] = useState(false);
   const [mode, setMode] = useState<"focus" | "break">("focus");
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
-  const [activeTask, setActiveTask] = useState(1);
+  const [activeTask, setActiveTask] = useState(0);
   const [taskInput, setTaskInput] = useState("");
   const [focusSessions, setFocusSessions] = useState<FocusSession[]>([]);
   const [quiet, setQuiet] = useState(true);
@@ -201,11 +197,13 @@ export function FocusDashboard() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [account, setAccount] = useState<AccountUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"local" | "syncing" | "synced" | "error">("local");
   const [toast, setToast] = useState("");
   const [timerEndsAt, setTimerEndsAt] = useState<number | null>(null);
   const lastActivity = useRef(Date.now() - 47 * 60 * 1000);
   const sessionStartedAt = useRef<string | null>(null);
+  const syncedAccountId = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -216,7 +214,7 @@ export function FocusDashboard() {
         if (data.focusSessions) setFocusSessions(data.focusSessions);
         const restoredProfile = data.profile ?? DEFAULT_PROFILE;
         setProfile(restoredProfile);
-        setOnboardingOpen(!restoredProfile.onboardingComplete);
+        setOnboardingOpen(false);
         if (data.settings) {
           const restored = data.settings;
           setSettings(restored);
@@ -240,8 +238,6 @@ export function FocusDashboard() {
             setSeconds(data.timer.seconds);
           }
         }
-      } else {
-        setOnboardingOpen(true);
       }
     } catch { /* device storage can be unavailable in private mode */ }
     setHydrated(true);
@@ -287,13 +283,16 @@ export function FocusDashboard() {
       .then((response) => response.ok ? response.json() : null)
       .then((data) => {
         if (!cancelled && data?.user) setAccount(data.user);
+        if (!cancelled) setAuthChecked(true);
       })
-      .catch(() => undefined);
+      .catch(() => !cancelled && setAuthChecked(true));
     return () => { cancelled = true; };
   }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated || !account) return;
+    if (syncedAccountId.current === account.id) return;
+    syncedAccountId.current = account.id;
     let cancelled = false;
     setSyncStatus("syncing");
     fetch("/api/sync", { cache: "no-store" })
@@ -305,12 +304,16 @@ export function FocusDashboard() {
           setSyncStatus("synced");
         } else {
           await fetch("/api/sync", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(currentStoredState()) });
+          if (!profile.onboardingComplete) setOnboardingOpen(true);
           if (!cancelled) setSyncStatus("synced");
         }
       })
-      .catch(() => !cancelled && setSyncStatus("error"));
+      .catch(() => {
+        syncedAccountId.current = null;
+        if (!cancelled) setSyncStatus("error");
+      });
     return () => { cancelled = true; };
-  }, [account, applyStoredState, currentStoredState, hydrated]);
+  }, [account, applyStoredState, currentStoredState, hydrated, profile.onboardingComplete]);
 
   useEffect(() => {
     if (!hydrated || !account || running) return;
@@ -432,6 +435,9 @@ export function FocusDashboard() {
   const weekRemainingMinutes = Math.max(0, weekGoalMinutes - weekTotalMinutes);
   const focusScore = Math.min(100, Math.round((todaySessions.length / Math.max(1, profile.dailyGoalSessions)) * 100));
   const streak = countFocusStreak(focusSessions);
+  const activeTaskTitle = tasks.find((task) => task.id === activeTask)?.title ?? "タスクを選択";
+  const openTasks = tasks.filter((task) => !task.done);
+  const taskProgress = tasks.length ? Math.max(8, (completed / tasks.length) * 100) : 0;
   const recentSessions = [...focusSessions].sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime()).slice(0, 3);
   const bestPeriod = todaySessions.length
     ? ["午前", "午後", "夜"].reduce((best, label) => {
@@ -445,13 +451,25 @@ export function FocusDashboard() {
     : "未記録";
 
   const toggleTask = (id: number) => {
-    setTasks((items) => items.map((task) => task.id === id ? { ...task, done: !task.done } : task));
+    const nextTasks = tasks.map((task) => task.id === id ? { ...task, done: !task.done } : task);
+    setTasks(nextTasks);
+    if (activeTask === id && nextTasks.find((task) => task.id === id)?.done) {
+      setActiveTask(nextTasks.find((task) => !task.done)?.id ?? 0);
+    }
+  };
+
+  const deleteTask = (id: number) => {
+    const nextTasks = tasks.filter((task) => task.id !== id);
+    setTasks(nextTasks);
+    if (activeTask === id) setActiveTask(nextTasks.find((task) => !task.done)?.id ?? nextTasks[0]?.id ?? 0);
   };
 
   const addTask = () => {
     const title = taskInput.trim();
     if (!title) return;
-    setTasks((items) => [...items, { id: Date.now(), title, estimate: 1, done: false }]);
+    const id = Date.now();
+    setTasks((items) => [...items, { id, title, estimate: 1, done: false }]);
+    if (!activeTask) setActiveTask(id);
     setTaskInput("");
   };
 
@@ -483,16 +501,20 @@ export function FocusDashboard() {
   const handleAuthSuccess = (user: AccountUser) => {
     setAccount(user);
     setAuthOpen(false);
-    setProfile((value) => ({ ...value, name: value.name || user.name, onboardingComplete: true }));
+    setProfile((value) => ({ ...value, name: value.name || user.name }));
+    setOnboardingOpen(!profile.onboardingComplete);
     setToast("アカウントに接続しました");
   };
 
   const logout = async () => {
     await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "logout" }) }).catch(() => undefined);
+    syncedAccountId.current = null;
     setAccount(null);
     setSyncStatus("local");
     setToast("この端末の保存に切り替えました");
   };
+
+  const authRequired = authChecked && !account;
 
   return (
     <div className="app-shell">
@@ -551,20 +573,21 @@ export function FocusDashboard() {
                 {[15, 25, 45, 60].map((value) => <button key={value} className={duration === value ? "active" : ""} onClick={() => setTimerDuration(value, "focus")}>{value}分</button>)}
               </div>
             </div>
-            <div className="current-task"><span className="task-color" /><span><small>集中するタスク</small><strong>{tasks.find((task) => task.id === activeTask)?.title ?? "タスクを選択"}</strong></span><select value={activeTask} onChange={(e) => setActiveTask(Number(e.target.value))} aria-label="集中するタスクを選択">{tasks.filter(t => !t.done).map(task => <option key={task.id} value={task.id}>{task.title}</option>)}</select></div>
+            <div className="current-task"><span className="task-color" /><span><small>集中するタスク</small><strong>{activeTaskTitle}</strong></span><select value={activeTask} onChange={(e) => setActiveTask(Number(e.target.value))} aria-label="集中するタスクを選択" disabled={!openTasks.length}><option value={0}>未選択</option>{openTasks.map(task => <option key={task.id} value={task.id}>{task.title}</option>)}</select></div>
           </section>
 
           {settings.visible.tasks && <section className="card task-card">
             <div className="card-heading"><div><span className="section-kicker">TODAY&apos;S TASKS</span><h2>今日のタスク</h2></div><span className="count-pill">{completed}/{tasks.length}</span></div>
-            <div className="progress-track"><span style={{ width: `${Math.max(8, completed / tasks.length * 100)}%` }} /></div>
+            <div className="progress-track"><span style={{ width: `${taskProgress}%` }} /></div>
             <div className="task-list">
-              {tasks.map((task) => (
+              {tasks.length ? tasks.map((task) => (
                 <div key={task.id} className={`task-row ${task.done ? "done" : ""}`}>
                   <button className="task-check" onClick={() => toggleTask(task.id)} aria-label={`${task.title}を${task.done ? "未完了" : "完了"}にする`}>{task.done && <Icon name="check" />}</button>
                   <button className="task-title" onClick={() => setActiveTask(task.id)}><span>{task.title}</span><small>予定 {task.estimate} ポモドーロ</small></button>
                   {!task.done && <button className="task-play" onClick={() => { setActiveTask(task.id); document.getElementById("timer")?.scrollIntoView({ behavior: "smooth" }); }} aria-label={`${task.title}を開始`}><Icon name="play" /></button>}
+                  <button className="task-delete" onClick={() => deleteTask(task.id)} aria-label={`${task.title}を削除`}>削除</button>
                 </div>
-              ))}
+              )) : <p className="empty-state">タスクはまだありません。下の入力欄から今日やることを追加してください。</p>}
             </div>
             <div className="add-task"><Icon name="plus" /><input value={taskInput} onChange={(e) => setTaskInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTask()} placeholder="タスクを追加..." aria-label="新しいタスク" /><button onClick={addTask}>追加</button></div>
           </section>}
@@ -611,8 +634,8 @@ export function FocusDashboard() {
         <a className="active" href="#top"><Icon name="home" /><span>今日</span></a><a href="#timer"><Icon name="timer" /><span>集中</span></a><button onClick={() => setMeetingOpen(true)}><Icon name="meeting" /><span>会議</span></button><a href="#insights"><Icon name="chart" /><span>記録</span></a><button onClick={() => setSettingsOpen(true)}><Icon name="settings" /><span>設定</span></button>
       </nav>
       {meetingOpen && <MeetingChecker onClose={() => setMeetingOpen(false)} />}
-      {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onSuccess={handleAuthSuccess} />}
-      {onboardingOpen && <OnboardingModal profile={profile} settings={settings} onComplete={(nextProfile, nextSettings) => {
+      {(authOpen || authRequired) && <AuthModal required={authRequired} onClose={() => setAuthOpen(false)} onSuccess={handleAuthSuccess} />}
+      {account && onboardingOpen && <OnboardingModal profile={profile} settings={settings} onComplete={(nextProfile, nextSettings) => {
         setProfile(nextProfile); setSettings(nextSettings); setQuiet(nextSettings.autoQuiet);
         setTimerDuration(nextSettings.focusMinutes, "focus"); setOnboardingOpen(false); setToast("初期設定を保存しました");
       }} />}
@@ -690,12 +713,13 @@ function OnboardingModal({
 }
 
 function AuthModal({
-  onClose, onSuccess,
+  onClose, onSuccess, required = false,
 }: {
   onClose: () => void;
   onSuccess: (user: AccountUser) => void;
+  required?: boolean;
 }) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup">(required ? "signup" : "signin");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -725,13 +749,13 @@ function AuthModal({
   };
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => !required && event.target === event.currentTarget && onClose()}>
       <div className="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-        <button className="modal-close" onClick={onClose} aria-label="認証を閉じる">×</button>
+        {!required && <button className="modal-close" onClick={onClose} aria-label="認証を閉じる">×</button>}
         <span className="modal-icon"><Icon name="spark" /></span>
         <span className="section-kicker">ACCOUNT SYNC</span>
         <h2 id="auth-title">{mode === "signin" ? "アカウントにログイン" : "アカウントを作成"}</h2>
-        <p>ログインすると、タスク・設定・集中記録がD1に保存され、端末を変えても同じデータを使えます。</p>
+        <p>{required ? "FocusFlowを使うにはアカウント認証が必要です。初回は新規登録を選んでください。" : "ログインすると、タスク・設定・集中記録がD1に保存され、端末を変えても同じデータを使えます。"}</p>
         <div className="auth-tabs">
           <button className={mode === "signin" ? "selected" : ""} onClick={() => setMode("signin")}>ログイン</button>
           <button className={mode === "signup" ? "selected" : ""} onClick={() => setMode("signup")}>新規登録</button>

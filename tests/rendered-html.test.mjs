@@ -35,11 +35,17 @@ test("keeps personal data local and provides configurable sections", async () =>
   assert.match(dashboard, /function SettingsModal/);
   assert.match(dashboard, /function OnboardingModal/);
   assert.match(dashboard, /function AuthModal/);
+  assert.match(dashboard, /authRequired/);
+  assert.match(dashboard, /required \? "signup" : "signin"/);
   assert.match(dashboard, /onboardingComplete/);
   assert.match(dashboard, /初期設定を保存しました/);
   assert.match(dashboard, /visible:\s*VisibleSections/);
   assert.match(dashboard, /バックアップを書き出す/);
   assert.match(dashboard, /ホームに表示する項目/);
+  assert.match(dashboard, /const INITIAL_TASKS: Task\[\] = \[\]/);
+  assert.match(dashboard, /const deleteTask =/);
+  assert.match(dashboard, /task-delete/);
+  assert.match(dashboard, /タスクはまだありません/);
 });
 
 test("ships PWA manifest and service worker assets", async () => {
