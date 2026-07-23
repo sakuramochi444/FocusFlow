@@ -69,13 +69,15 @@ test("ships PWA manifest and service worker assets", async () => {
 });
 
 test("defines account database and sync API routes", async () => {
-  const [hosting, schema, authRoute, syncRoute, migration, packagedMigration] = await Promise.all([
+  const [hosting, schema, authRoute, syncRoute, migration, packagedMigration, packageJson, packageScript] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/auth/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/sync/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0000_zippy_starfox.sql", import.meta.url), "utf8"),
     readFile(new URL("../dist/server/migrations/0000_zippy_starfox.sql", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/package-d1-migrations.mjs", import.meta.url), "utf8"),
   ]);
   assert.match(hosting, /"d1": "DB"/);
   assert.match(schema, /users = sqliteTable/);
@@ -85,4 +87,6 @@ test("defines account database and sync API routes", async () => {
   assert.match(syncRoute, /getCurrentUser/);
   assert.match(migration, /CREATE TABLE `users`/);
   assert.match(packagedMigration, /CREATE TABLE `users`/);
+  assert.match(packageJson, /package-d1-migrations\.mjs/);
+  assert.match(packageScript, /dist", "server", "migrations"/);
 });
