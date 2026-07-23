@@ -323,6 +323,7 @@ footer p { margin: 0; }
   .onboarding-hero, .guide-grid, .setup-form { padding-left: 20px; padding-right: 20px; }
   .guide-grid { grid-template-columns: 1fr; }
   .onboarding-start { width: calc(100% - 40px); margin-left: 20px; margin-right: 20px; }
+  input:not([type="checkbox"]), select, textarea { font-size: 16px !important; }
 }
 
 @media (max-width: 520px) {
